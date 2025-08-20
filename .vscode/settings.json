@@ -1,0 +1,25 @@
+{
+    "cSpell.words": [
+        "automations",
+        "dotenv",
+        "upserting"
+    ],
+    // automatic on save formatting
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "always"
+        },
+    },
+    // required for production environment
+    "python.envFile": "${workspaceFolder}/.env",
+    "logViewer.watch": [
+        {
+            "title": "Game Session Sync",
+            "pattern": "${workspaceFolder}/*.log"
+        }
+    ],
+    "logViewer.followTailMode": "auto",
+    "logViewer.chunkSizeKb": 256
+}

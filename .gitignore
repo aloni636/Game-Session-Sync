@@ -1,0 +1,13 @@
+# environment
+poetry.lock
+.venv
+
+# credentials
+client_secrets.json
+credentials.json
+.env
+dev.env
+
+# miscellaneous 
+*.log
+state.json
