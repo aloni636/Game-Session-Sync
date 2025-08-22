@@ -2,7 +2,12 @@
 A Windows scheduled task which monitors screenshots & screen recordings, aggregates them into sessions, and uploads them to Google Drive and Notion.
 
 # Setup
-See [PyDrive2 authentication quick guide](https://docs.iterative.ai/PyDrive2/quickstart/#authentication).
+1. Generally follow [PyDrive2 authentication quick guide](https://docs.iterative.ai/PyDrive2/quickstart/#authentication).
+
+1. Configure OAuth in *Google Auth Platform / Data acces* to have `./auth/drive.file` scope, **not** `./auth/drive`. Scope `./auth/drive.file` is a restricted version of `./auth/drive` and **doesn't require verification of the application**.
+
+1. Publish the application in *Google Auth Platform / Audience* to **Production**. This will extend the lifespan of the access tokens.
+
 
 ## Dev Worflows
 - Poetry for dependency management
