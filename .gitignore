@@ -1,6 +1,9 @@
 # environment
 poetry.lock
 .venv
+deployment
+dist
+__pycache__
 
 # credentials
 client_secrets.json
