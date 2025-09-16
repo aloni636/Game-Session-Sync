@@ -12,6 +12,9 @@ dependencies = [
     "pydrive2 (>=1.21.3,<2.0.0)",
     "win11toast (>=0.35,<0.36)",
     "watchdog (>=6.0.0,<7.0.0)",
+    "wmi (>=1.5.1,<2.0.0)",
+    "psutil (>=7.0.0,<8.0.0)",
+    "pywin32 (>=311,<312)",
 ]
 
 [build-system]

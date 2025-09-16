@@ -2,6 +2,15 @@ import asyncio
 from asyncio import Queue
 
 
+# TODO: Experiment with 
+# [X] Queue
+# [ ] Event
+# [ ] Condition
+# [ ] Lock
+# [ ] Semaphore/BoundedSemaphore
+# [ ] Future
+# [ ] Task cancellation via asyncio.CancelledError
+
 class ConsoleProducer:
     def __init__(self, queue: Queue) -> None:
         self.queue = queue
