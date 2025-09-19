@@ -1,27 +1,27 @@
 import asyncio
 import os
 import threading
-from asyncio import Queue
-from dataclasses import dataclass
+from asyncio import Event, Queue
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal, TypeAlias
 
+import ctypes
 import psutil
 import pythoncom
 import win32gui
 import win32process
-from ctypes import windll
+from ctypes import Structure, windll, wintypes
 from psutil import Process
 from wmi import WMI, x_wmi_timed_out
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-WMI_DATETIME_BASE = datetime(1601, 1, 1, tzinfo=timezone.utc)
-
 user32 = windll.user32
-user32.SetProcessDPIAware()
+kernel32 = windll.kernel32
+
 
 GOG_ROOT = Path(r"C:\Program Files (x86)\GOG Galaxy\Games")
 
@@ -29,107 +29,153 @@ GOG_ROOT = Path(r"C:\Program Files (x86)\GOG Galaxy\Games")
 @dataclass
 class NewScreenshotEvent:
     path: Path
-    time: datetime
+    time: datetime = field(default_factory=lambda: datetime.now().astimezone())
 
 
 @dataclass
-class GameEvent:
+class WindowEvent:
     exe: Path
     name: str
     state: Literal["open", "minimized", "fullscreen", "closed"]
-    time: datetime
+    time: datetime = field(default_factory=lambda: datetime.now().astimezone())
 
 
-EventBus: TypeAlias = Queue[NewScreenshotEvent | GameEvent]
+@dataclass
+class InputIdleEvent:
+    idle_seconds: float
+    timestamp: datetime = field(default_factory=lambda: datetime.now().astimezone())
 
 
-class FullScreenTracker:
-    def __init__(self, polling_interval_ms: int, queue: EventBus) -> None:
-        self.queue = queue
-        self.polling_interval_ms = polling_interval_ms
-        self.current_foreground_hwnd: int | None = None
-        self.current_pid: int | None = None
-        self.current_is_fullscreen = False
-        self.full_screen_rect = (
+@dataclass
+class InputActiveEvent:
+    idle_seconds: float
+    timestamp: datetime = field(default_factory=lambda: datetime.now().astimezone())
+
+
+EventBus: TypeAlias = Queue[
+    NewScreenshotEvent | WindowEvent | InputIdleEvent | InputActiveEvent
+]
+
+
+# Polls the current foreground window and tracks its fullscreen bounds against the last sample.
+# On any focus or fullscreen change, it enqueues a GameEvent describing the process state.
+class FullScreenWatcher:
+    user32.SetProcessDPIAware()
+
+    def __init__(self, queue: EventBus, polling_interval_ms: int) -> None:
+        self._queue = queue
+        self._polling_interval_ms = polling_interval_ms
+        self._current_foreground_hwnd: int | None = None
+        self._current_pid: int | None = None
+        self._current_is_fullscreen = False
+        self._full_screen_rect = (
             0,
             0,
             user32.GetSystemMetrics(0),
             user32.GetSystemMetrics(1),
         )
+        self._stop_event = Event()
 
     async def run(self):
-        while True:
+        while not self._stop_event.is_set():
+            prev_hwnd = self._current_foreground_hwnd
+            prev_pid = self._current_pid
+            prev_is_full = self._current_is_fullscreen
+
+            hwnd = user32.GetForegroundWindow()
+            rect = win32gui.GetWindowRect(hwnd)
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            is_full = rect == self._full_screen_rect
+
+            is_same_hwnd = prev_hwnd == hwnd
+            is_same_full = prev_is_full == is_full
+
+            # Focus left the previous window: if it was fullscreen, report it as minimized
+            if prev_hwnd is not None and not is_same_hwnd and prev_is_full:
+                try:
+                    p = Process(prev_pid)  # narrow catch
+                    exe_path = Path(p.exe())
+                    name = p.name()
+                except psutil.NoSuchProcess:
+                    exe_path = Path("psutil.NoSuchProcess")
+                    name = "psutil.NoSuchProcess"
+                await self._queue.put(
+                    WindowEvent(
+                        exe=exe_path,
+                        name=name,
+                        state="minimized",
+                    )
+                )
+
+            # New window or fullscreen state flip: emit current state
+            if (not is_same_hwnd) or (not is_same_full):
+                try:
+                    p = Process(pid)
+                    exe_path = Path(p.exe())
+                    name = p.name()
+                except psutil.NoSuchProcess:
+                    exe_path = Path("psutil.NoSuchProcess")
+                    name = "psutil.NoSuchProcess"
+                await self._queue.put(
+                    WindowEvent(
+                        exe=exe_path,
+                        name=name,
+                        state=("fullscreen" if is_full else "minimized"),
+                    )
+                )
+
+            self._current_foreground_hwnd = hwnd
+            self._current_pid = pid
+            self._current_is_fullscreen = is_full
+
             try:
-                prev_hwnd = self.current_foreground_hwnd
-                prev_pid = self.current_pid
-                prev_is_full = self.current_is_fullscreen
+                await asyncio.wait_for(
+                    self._stop_event.wait(), timeout=self._polling_interval_ms / 1000
+                )
+            except asyncio.TimeoutError:
+                continue
 
-                hwnd = user32.GetForegroundWindow()
-                rect = win32gui.GetWindowRect(hwnd)
-                _, pid = win32process.GetWindowThreadProcessId(hwnd)
-                is_full = rect == self.full_screen_rect
-
-                is_same_hwnd = prev_hwnd == hwnd
-                is_same_full = prev_is_full == is_full
-
-                # Focus left the previous window: if it was fullscreen, report it as minimized
-                if prev_hwnd is not None and not is_same_hwnd and prev_is_full:
-                    try:
-                        p = Process(prev_pid)  # narrow catch
-                        exe_path = Path(p.exe())
-                        name = p.name()
-                    except psutil.NoSuchProcess:
-                        exe_path = Path("psutil.NoSuchProcess")
-                        name = "psutil.NoSuchProcess"
-                    await self.queue.put(
-                        GameEvent(
-                            exe=exe_path,
-                            name=name,
-                            state="minimized",
-                            time=datetime.now().astimezone(),
-                        )
-                    )
-
-                # New window or fullscreen state flip: emit current state
-                if (not is_same_hwnd) or (not is_same_full):
-                    try:
-                        p = Process(pid)
-                        exe_path = Path(p.exe())
-                        name = p.name()
-                    except psutil.NoSuchProcess:
-                        exe_path = Path("psutil.NoSuchProcess")
-                        name = "psutil.NoSuchProcess"
-                    await self.queue.put(
-                        GameEvent(
-                            exe=exe_path,
-                            name=name,
-                            state=("fullscreen" if is_full else "minimized"),
-                            time=datetime.now().astimezone(),
-                        )
-                    )
-
-                self.current_foreground_hwnd = hwnd
-                self.current_pid = pid
-                self.current_is_fullscreen = is_full
-
-            except Exception:
-                pass
-            await asyncio.sleep(self.polling_interval_ms / 1000)
+    def close(self):
+        self._stop_event.set()
 
 
-class WmiProcessProducerThread(threading.Thread):
+class WmiProcessWatcher(threading.Thread):
+    WMI_DATETIME_BASE = datetime(1601, 1, 1, tzinfo=timezone.utc)
+
     def __init__(self, loop: asyncio.AbstractEventLoop, queue: EventBus) -> None:
         super().__init__(daemon=True)
-        self.loop = loop
-        self.queue = queue
-        self.stop_evt = threading.Event()
+        self._loop = loop
+        self._queue = queue
+        self._stop_evt = threading.Event()
         # Retain mapping to resolve process metadata after it was killed.
         self._pid_to_meta: dict[int, tuple[Path, str]] = {}
 
     @staticmethod
-    def _ticks_to_dt(ticks: int) -> datetime:
+    def _wmi_ticks_to_dt(ticks: int) -> datetime:
         # TIME_CREATED is 100ns ticks since 1601-01-01 UTC
-        return (WMI_DATETIME_BASE + timedelta(microseconds=ticks // 10)).astimezone()
+        return (
+            WmiProcessWatcher.WMI_DATETIME_BASE + timedelta(microseconds=ticks // 10)
+        ).astimezone()
+
+    def _wmi_process_info(self, e, use_cache: bool):
+        dt = WmiProcessWatcher._wmi_ticks_to_dt(int(e.TIME_CREATED))
+
+        if use_cache:
+            meta = self._pid_to_meta.pop(e.ProcessID, None)
+            if meta is not None:
+                (exe, name) = meta
+                return exe, name, dt
+        try:
+            proc = psutil.Process(e.ProcessID)
+            exe = Path(proc.exe())
+            name = proc.name()
+            self._pid_to_meta[e.ProcessID] = (exe, name)
+
+        except psutil.NoSuchProcess:
+            exe = Path("psutil.NoSuchProcess")
+            name: str = getattr(e, "ProcessName", "psutil.NoSuchProcess")
+
+        return exe, name, dt
 
     def run(self) -> None:
         pythoncom.CoInitialize()
@@ -139,27 +185,20 @@ class WmiProcessProducerThread(threading.Thread):
             stop_w = c.Win32_ProcessStopTrace.watch_for()
 
             # Alternate between monitoring processes creation and deletion
-            while not self.stop_evt.is_set():
+            while not self._stop_evt.is_set():
                 # start
                 try:
                     e = start_w(timeout_ms=200)
-                    try:
-                        proc = psutil.Process(e.ProcessID)
-                        exe = Path(proc.exe())
-                        name = proc.name()
-                    except psutil.NoSuchProcess:
-                        exe = Path("psutil.NoSuchProcess")
-                        name = getattr(e, "ProcessName", "psutil.NoSuchProcess")
+                    exe, name, dt = self._wmi_process_info(e, use_cache=False)
 
-                    self._pid_to_meta[e.ProcessID] = (exe, name)
-
-                    self.loop.call_soon_threadsafe(
-                        self.queue.put_nowait,
-                        GameEvent(
+                    # see https://docs.python.org/3/library/asyncio-dev.html#concurrency-and-multithreading
+                    self._loop.call_soon_threadsafe(
+                        self._queue.put_nowait,
+                        WindowEvent(
                             exe=exe,
                             name=name,
                             state="open",
-                            time=self._ticks_to_dt(int(e.TIME_CREATED)),
+                            time=dt,
                         ),
                     )
                 except x_wmi_timed_out:
@@ -168,26 +207,15 @@ class WmiProcessProducerThread(threading.Thread):
                 # stop
                 try:
                     e = stop_w(timeout_ms=200)
-                    meta = self._pid_to_meta.pop(e.ProcessID, None)
-                    if meta is not None:
-                        exe, name = meta
-                    else:
-                        # Try psutil once; narrow exception.
-                        try:
-                            proc = psutil.Process(e.ProcessID)
-                            exe = Path(proc.exe())
-                            name = proc.name()
-                        except psutil.NoSuchProcess:
-                            exe = Path("psutil.NoSuchProcess")
-                            name = getattr(e, "ProcessName", "psutil.NoSuchProcess")
+                    exe, name, dt = self._wmi_process_info(e, use_cache=True)
 
-                    self.loop.call_soon_threadsafe(
-                        self.queue.put_nowait,
-                        GameEvent(
+                    self._loop.call_soon_threadsafe(
+                        self._queue.put_nowait,
+                        WindowEvent(
                             exe=exe,
                             name=name,
                             state="closed",
-                            time=self._ticks_to_dt(int(e.TIME_CREATED)),
+                            time=self._wmi_ticks_to_dt(int(e.TIME_CREATED)),
                         ),
                     )
                 except x_wmi_timed_out:
@@ -196,22 +224,81 @@ class WmiProcessProducerThread(threading.Thread):
             pythoncom.CoUninitialize()
 
     def stop(self):
-        self.stop_evt.set()
+        self._stop_evt.set()
 
 
 class FileWatcherHandler(FileSystemEventHandler):
     def __init__(self, loop: asyncio.AbstractEventLoop, queue: EventBus) -> None:
         super().__init__()
-        self.loop = loop
-        self.queue = queue
+        self._loop = loop
+        self._queue = queue
 
     def on_created(self, event: FileSystemEvent) -> None:
         if getattr(event, "is_directory", False):
             return
         # watchdog may supply bytes on some backends; normalize to str.
         src = os.fsdecode(event.src_path)
-        ev = NewScreenshotEvent(path=Path(src), time=datetime.now().astimezone())
-        self.loop.call_soon_threadsafe(self.queue.put_nowait, ev)
+        ev = NewScreenshotEvent(path=Path(src))
+        self._loop.call_soon_threadsafe(self._queue.put_nowait, ev)
+
+
+class InputIdleWatcher:
+    # see https://docs.python.org/3/library/ctypes.html#structures-and-unions
+    class LASTINPUTINFO(Structure):
+        _fields_ = [
+            ("cbSize", wintypes.UINT),
+            ("dwTime", wintypes.DWORD),
+        ]
+
+    # see https://docs.python.org/3/library/ctypes.html#specifying-the-required-argument-types-function-prototypes
+    kernel32.GetTickCount64.restype = ctypes.c_ulonglong
+    user32.GetLastInputInfo.argtypes = [ctypes.POINTER(LASTINPUTINFO)]
+    user32.GetLastInputInfo.restype = wintypes.BOOL
+
+    def __init__(
+        self, queue: EventBus, polling_interval_ms: float, idle_seconds: float
+    ) -> None:
+        self._queue = queue
+        self._polling_interval_ms = polling_interval_ms
+        self._idle_seconds = idle_seconds
+        self._reported = False
+        self._stop_event = Event()
+
+    async def run(
+        self,
+    ) -> None:
+        while not self._stop_event.is_set():
+            idle_seconds = self._get_idle_seconds()
+
+            if idle_seconds >= self._idle_seconds and not self._reported:
+                await self._queue.put(InputIdleEvent(idle_seconds=idle_seconds))
+                self._reported = True
+            elif idle_seconds < self._idle_seconds and self._reported:
+                await self._queue.put(InputActiveEvent(idle_seconds=idle_seconds))
+                self._reported = False
+
+            try:
+                await asyncio.wait_for(
+                    self._stop_event.wait(), timeout=self._polling_interval_ms / 1000
+                )
+            except asyncio.TimeoutError:
+                continue
+
+    def _get_idle_seconds(self) -> float:
+        info = InputIdleWatcher.LASTINPUTINFO()
+        info.cbSize = ctypes.sizeof(InputIdleWatcher.LASTINPUTINFO)
+
+        if not user32.GetLastInputInfo(ctypes.byref(info)):
+            return 0.0
+
+        tick_count = int(kernel32.GetTickCount64())
+        last_input = int(info.dwTime)
+        # dwTime is in milliseconds since system start
+        idle_ms = (tick_count - last_input) if tick_count >= last_input else 0
+        return idle_ms / 1000.0
+
+    def stop(self):
+        self._stop_event.set()
 
 
 class Consumer:
@@ -231,15 +318,25 @@ class Consumer:
         while True:
             e = await self.event_queue.get()
             try:
-                if isinstance(e, GameEvent):
+                if isinstance(e, WindowEvent):
                     # Filter to GOG install root
                     if self._is_under(GOG_ROOT, e.exe):
                         print(
-                            "[game:%s] time=%s name=%s exe=%s"
+                            "[window:%s] time=%s name=%s exe=%s"
                             % (e.state, e.time.time(), e.name, e.exe)
                         )
                 elif isinstance(e, NewScreenshotEvent):
                     print("[screenshot] time=%s path=%s" % (e.time.time(), e.path))
+                elif isinstance(e, InputIdleEvent):
+                    print(
+                        "[input-idle] time=%s idle_seconds=%.2f"
+                        % (e.timestamp.time(), e.idle_seconds)
+                    )
+                elif isinstance(e, InputActiveEvent):
+                    print(
+                        "[input-active] time=%s idle_seconds=%.2f"
+                        % (e.timestamp.time(), e.idle_seconds)
+                    )
             finally:
                 self.event_queue.task_done()
 
@@ -248,7 +345,7 @@ async def main():
     queue: EventBus = Queue()
     loop = asyncio.get_running_loop()
 
-    producer = WmiProcessProducerThread(loop, queue)
+    producer = WmiProcessWatcher(loop, queue)
     producer.start()
 
     event_handler = FileWatcherHandler(loop, queue)
@@ -258,7 +355,8 @@ async def main():
     try:
         await asyncio.gather(
             Consumer(queue).run(),
-            FullScreenTracker(500, queue).run(),
+            FullScreenWatcher(queue, 500).run(),
+            InputIdleWatcher(queue, 500, 5).run(),
         )
     finally:
         observer.stop()
