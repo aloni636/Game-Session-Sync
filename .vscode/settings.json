@@ -1,7 +1,9 @@
 {
     "cSpell.words": [
         "automations",
+        "BGRX",
         "dotenv",
+        "frombytes",
         "upserting"
     ],
     // automatic on save formatting
@@ -17,9 +19,14 @@
     "logViewer.watch": [
         {
             "title": "Game Session Sync",
-            "pattern": "${workspaceFolder}/*.log"
+            "pattern": "${workspaceFolder}/game_session_sync.log"
+        },
+        {
+            "title": "App Log",
+            "pattern": "${workspaceFolder}/app.log"
         }
     ],
     "logViewer.followTailMode": "auto",
-    "logViewer.chunkSizeKb": 256
+    "logViewer.chunkSizeKb": 256,
+    "python.analysis.autoImportCompletions": true
 }

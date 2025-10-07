@@ -5,13 +5,16 @@ deployment
 dist
 __pycache__
 
-# credentials
+# secrets
 client_secrets.json
 credentials.json
 .env
 dev.env
+config.yaml
+config.dev.yaml
 
 # miscellaneous 
 *.log
 state.json
 observatory
+images

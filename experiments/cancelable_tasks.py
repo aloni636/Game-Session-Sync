@@ -1,38 +1,35 @@
 import asyncio
-import subprocess
-import time
 from asyncio import Event, Task
-from random import randint
-from typing import IO, cast
+
+from .console import Console
 
 
-# Open a new console window running PowerShell that echoes stdin lines
-class Console:
-    def __init__(self) -> None:
-        self._p = subprocess.Popen(
-            [
-                "powershell.exe",
-                "-NoLogo",
-                "-NoExit",
-                "-Command",
-                # Read from $input and print each line as-is
-                "$input | ForEach-Object { $_ }",
-            ],
-            creationflags=subprocess.CREATE_NEW_CONSOLE,
-            stdin=subprocess.PIPE,
-            text=True,  # send str, not bytes
-            bufsize=1,  # line-buffered
-        )
+class Runner:
+    def __init__(self, name: str, console: Console, interval_ms: float) -> None:
+        self.name = name
+        self.console = console
+        self._stop_event = Event()
+        self.interval_ms = interval_ms
 
-    def print(self, line: str):
-        self._p.stdin = cast(
-            IO[str], self._p.stdin
-        )  # tells pylint p.stdin cannot be None
-        self._p.stdin.write(line + "\n")
-        self._p.stdin.flush()
+    async def run(self):
+        while not self._stop_event.is_set():
+            start = asyncio.get_event_loop().time()
 
-    def kill(self):
-        self._p.kill()
+            # loop business logic
+            self.console.print(f"[{self.name}] hello from {self.name}")
+
+            try:
+                await asyncio.wait_for(
+                    self._stop_event.wait(),
+                    # compensate for non zero duration work at each iteration
+                    (self.interval_ms / 1000)
+                    - (asyncio.get_event_loop().time() - start),
+                )
+            except asyncio.TimeoutError:
+                continue
+
+    def stop(self):
+        self._stop_event.set()
 
 
 class Manager:
@@ -83,34 +80,6 @@ class Manager:
         finally:
             self._runners.pop(name)
             self._tasks.pop(name)
-
-
-class Runner:
-    def __init__(self, name: str, console: Console, interval_ms: float) -> None:
-        self.name = name
-        self.console = console
-        self._stop_event = Event()
-        self.interval_ms = interval_ms
-
-    async def run(self):
-        while not self._stop_event.is_set():
-            start = asyncio.get_event_loop().time()
-
-            # loop business logic
-            self.console.print(f"[{self.name}] hello from {self.name}")
-
-            try:
-                await asyncio.wait_for(
-                    self._stop_event.wait(),
-                    # compensate for non zero duration work at each iteration
-                    (self.interval_ms / 1000)
-                    - (asyncio.get_event_loop().time() - start),
-                )
-            except asyncio.TimeoutError:
-                continue
-
-    def stop(self):
-        self._stop_event.set()
 
 
 # Demo

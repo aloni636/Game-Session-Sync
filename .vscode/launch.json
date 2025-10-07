@@ -5,13 +5,16 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Current File",
+            "name": "Python: Module",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "module": "game_session_sync",
+            "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
             // supports overriding .env file for local debugging
-            "envFile": "${workspaceFolder}/dev.env"
+            "env": {
+                "CONFIG_YAML": "config.dev.yaml"
+            },
         }
     ]
 }
