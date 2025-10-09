@@ -95,7 +95,7 @@ def deltas(a: RECT, b: RECT):
 def main():
     user32.SetProcessDPIAware()
     prev_snapshot = None
-    print("Polling… Ctrl+C to stop")
+    print("Polling... Ctrl+C to stop")
     while True:
         try:
             hwnd = user32.GetForegroundWindow()

@@ -3,6 +3,7 @@ import logging
 import os
 from asyncio import Event
 from pathlib import Path
+from time import sleep
 
 from PIL import Image
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
@@ -30,7 +31,7 @@ class _FileWatcherHandler(FileSystemEventHandler):
         self.log = logging.getLogger(self.__class__.__name__)
 
     def on_created(self, event: FileSystemEvent) -> None:
-        if getattr(event, "is_directory", False):
+        if event.is_directory:
             return
 
         # watchdog may supply bytes on some backends; normalize to str.
@@ -38,11 +39,16 @@ class _FileWatcherHandler(FileSystemEventHandler):
         if not src_path.endswith(".png"):
             self.log.warning(f"Found screenshot with unexpected prefix: {src_path}")
             return
-        img = Image.open(src_path)
+        sleep(1)
+        self.log.info(f"Opening manually shot screenshot: {src_path}")
+        with Image.open(src_path) as img:
+            img.load()
         screenshot = ManualScreenshot(img)
+        self.log.info(f"Pushing manually shot screenshot to queue...")
         self._loop.call_soon_threadsafe(self._queue.put_nowait, screenshot)
         if self._delete_after_push:
             os.remove(src_path)
+            self.log.info(f"Deleting manual screenshot at path: {src_path}")
 
 
 class ScreenshotWatcher(Producer):
