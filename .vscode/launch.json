@@ -5,7 +5,19 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Module",
+            "name": "accessability_events",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "experiments.accessability_events"
+        },
+        {
+            "name": "ui_automation_events",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "experiments.ui_automation_events"
+        },
+        {
+            "name": "game_session_sync",
             "type": "debugpy",
             "request": "launch",
             "module": "game_session_sync",

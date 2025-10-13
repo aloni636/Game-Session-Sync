@@ -18,13 +18,15 @@ from comtypes.gen.UIAutomationClient import (  # CoClasses
     CUIAutomation8,
     IUIAutomationEventHandler,
     IUIAutomationFocusChangedEventHandler,
+    IUIAutomationPropertyChangedEventHandler,
     TreeScope_Subtree,
+    UIA_BoundingRectanglePropertyId,
     UIA_Window_WindowClosedEventId,
     UIA_Window_WindowOpenedEventId,
 )
 
 
-class UIAutomationWatcher(threading.Thread):
+class UIAWatcher(threading.Thread):
     def __init__(self, console: Console):
         super().__init__(daemon=True)
         self.console = console
@@ -60,6 +62,19 @@ class UIAutomationWatcher(threading.Thread):
                     f"FOCUS: {sender.CurrentProcessId} {hex(sender.CurrentNativeWindowHandle)}"
                 )
 
+        class PropEvt(comtypes.COMObject):
+            _com_interfaces_ = [IUIAutomationPropertyChangedEventHandler]
+
+            def HandlePropertyChangedEvent(self, sender, propId, newVal):
+                if propId == UIA_BoundingRectanglePropertyId:
+                    rect = sender.get_CurrentBoundingRectangle
+                    console.print(
+                        f"WIN_SIZE: {sender.CurrentProcessId} "
+                        f"HWND: {sender.CurrentNativeWindowHandle} "
+                        f"Rect: {rect} "
+                    )
+                return 0
+
         # instantiate automation (either one works)
         # uia = CreateObject("UIAutomationClient.CUIAutomation")     # returns IUIAutomation
         uia = CreateObject(CUIAutomation8)  # returns IUIAutomation2 but compatible
@@ -67,6 +82,7 @@ class UIAutomationWatcher(threading.Thread):
 
         win_h = WindowEvt()
         focus_h = FocusEvt()
+        # prop_h = PropEvt()
 
         uia.AddAutomationEventHandler(
             UIA_Window_WindowOpenedEventId, root, TreeScope_Subtree, None, win_h
@@ -75,6 +91,10 @@ class UIAutomationWatcher(threading.Thread):
             UIA_Window_WindowClosedEventId, root, TreeScope_Subtree, None, win_h
         )
         uia.AddFocusChangedEventHandler(None, focus_h)
+        # NOTE: PropEvt is crashing Python; IDK why...
+        # uia.AddPropertyChangedEventHandler(
+        #     root, TreeScope_Subtree, None, prop_h, (UIA_BoundingRectanglePropertyId,)
+        # )
 
         try:
             while not self.stop_evt.is_set():
@@ -88,12 +108,13 @@ class UIAutomationWatcher(threading.Thread):
                 UIA_Window_WindowClosedEventId, root, win_h
             )
             uia.RemoveFocusChangedEventHandler(focus_h)
+            # uia.RemovePropertyChangedEventHandler(root, prop_h)
             pythoncom.CoUninitialize()
 
 
 async def main():
     console = Console()
-    watcher = UIAutomationWatcher(console)
+    watcher = UIAWatcher(console)
 
     watcher.start()
     try:
@@ -105,7 +126,6 @@ async def main():
                 break
             else:
                 print("Unrecognized command")
-
     finally:
         watcher.stop()
         console.kill()
