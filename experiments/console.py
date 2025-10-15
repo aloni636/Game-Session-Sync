@@ -19,6 +19,7 @@ class Console:
             text=True,  # send str, not bytes
             bufsize=1,  # line-buffered
         )
+        self.stdin = self._p.stdin
 
     def print(self, line: str):
         self._p.stdin = cast(

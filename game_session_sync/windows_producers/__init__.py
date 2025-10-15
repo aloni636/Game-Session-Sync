@@ -1,7 +1,6 @@
 from ..screenshot_producers.screenshot_watcher import ScreenshotWatcher
-from .fullscreen_watcher import FullScreenWatcher
 from .input_idle_watcher import InputIdleWatcher
-from .process_watcher import ProcessWatcher
+from .window_watcher import WindowEventWatcher
 from .types import (
     EventBus,
     InputActiveEvent,
@@ -13,9 +12,8 @@ from .types import (
 )
 
 __all__ = [
-    "FullScreenWatcher",
     "InputIdleWatcher",
-    "ProcessWatcher",
+    "WindowEventWatcher",
     "ScreenshotWatcher",
     "EventBus",
     "WindowOpenEvent",

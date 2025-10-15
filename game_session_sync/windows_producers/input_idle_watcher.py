@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from asyncio import Event
 
 import ctypes
@@ -12,13 +11,15 @@ user32 = windll.user32
 kernel32 = windll.kernel32
 
 
+class LASTINPUTINFO(Structure):
+    _fields_ = [
+        ("cbSize", wintypes.UINT),
+        ("dwTime", wintypes.DWORD),
+    ]
+
+
 class InputIdleWatcher(Producer):
     # see https://docs.python.org/3/library/ctypes.html#structures-and-unions
-    class LASTINPUTINFO(Structure):
-        _fields_ = [
-            ("cbSize", wintypes.UINT),
-            ("dwTime", wintypes.DWORD),
-        ]
 
     # see https://docs.python.org/3/library/ctypes.html#specifying-the-required-argument-types-function-prototypes
     kernel32.GetTickCount64.restype = ctypes.c_ulonglong
@@ -33,11 +34,10 @@ class InputIdleWatcher(Producer):
         self._idle_seconds = idle_seconds
         self._reported = False
         self._stop_event = Event()
-        self.log = logging.getLogger(self.__class__.__name__)
 
     def _get_idle_seconds(self) -> float:
-        info = InputIdleWatcher.LASTINPUTINFO()
-        info.cbSize = ctypes.sizeof(InputIdleWatcher.LASTINPUTINFO)
+        info = LASTINPUTINFO()
+        info.cbSize = ctypes.sizeof(LASTINPUTINFO)
 
         if not user32.GetLastInputInfo(ctypes.byref(info)):
             return 0.0
@@ -51,7 +51,6 @@ class InputIdleWatcher(Producer):
     async def run(
         self,
     ) -> None:
-        self.log.info("InputIdleWatcher running...")
         while not self._stop_event.is_set():
             idle_seconds = self._get_idle_seconds()
 

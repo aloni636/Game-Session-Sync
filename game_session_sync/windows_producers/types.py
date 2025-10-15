@@ -4,18 +4,19 @@ from typing import TypeAlias
 
 from ..types import LoggingQueue
 
+_now_field = field(default_factory=lambda: datetime.now().astimezone())
+
 
 @dataclass(slots=True)
 class BaseWindowEvent:
-    exe: str | None
-    name: str | None
-    time: datetime = field(default_factory=lambda: datetime.now().astimezone())
+    title: str
+    time: datetime = _now_field
 
 
 @dataclass(slots=True)
 class _InputEvent:
     idle_seconds: float
-    timestamp: datetime = field(default_factory=lambda: datetime.now().astimezone())
+    timestamp: datetime = _now_field
 
 
 @dataclass(slots=True)

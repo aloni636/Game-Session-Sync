@@ -5,8 +5,6 @@ from asyncio import Event
 from functools import wraps
 from typing import Generic, TypeVar, final
 
-logger = logging.getLogger("AbstractProducer")
-
 
 class Producer(ABC):
     """Wraps `__init__` and `async run()` for logging, and provides `self._stop_event` inside
@@ -15,7 +13,7 @@ class Producer(ABC):
 
     def __init__(self) -> None:
         self._stop_event = Event()
-        logger.debug(f"{self.__class__.__name__} fully initialized")
+        self.log = logging.getLogger(self.__class__.__name__)
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
@@ -25,7 +23,7 @@ class Producer(ABC):
 
         @wraps(original_run)
         async def _wrapped_run(self):
-            logger.debug(f"{self.__class__.__name__} received run signal")
+            self.log.debug("received run signal")
             self._stop_event.clear()
             return await original_run(self)
 
@@ -38,7 +36,8 @@ class Producer(ABC):
             @wraps(original_init)
             def wrapped_init(self, *args, **kwargs):
                 Producer.__init__(self)
-                return original_init(self, *args, **kwargs)
+                original_init(self, *args, **kwargs)
+                self.log.debug(f"fully initialized")
 
             cls.__init__ = wrapped_init
 
@@ -48,7 +47,7 @@ class Producer(ABC):
 
     @final
     def stop(self):
-        logger.debug(f"{self.__class__.__name__} received stop signal")
+        self.log.debug(f"received stop signal")
         self._stop_event.set()
 
 
@@ -56,15 +55,19 @@ T = TypeVar("T")
 
 
 class LoggingQueue(asyncio.Queue[T], Generic[T]):
+    def __init__(self, maxsize: int = 0) -> None:
+        super().__init__(maxsize)
+        self._log = logging.getLogger(self.__class__.__name__)
+
     async def put(self, item: T) -> None:
-        logging.debug(f"Pushing event into EventBus queue: {item!r}")
+        self._log.debug(f"Putting: {item!r}")
         return await super().put(item)
 
     def put_nowait(self, item: T) -> None:
-        logging.debug(f"Pushing event into EventBus queue: {item!r}")
+        self._log.debug(f"Putting: {item!r}")
         return super().put_nowait(item)
 
     async def get(self) -> T:
         item = await super().get()
-        logging.debug(f"Popping event from EventBus queue: {item!r}")
+        self._log.debug(f"Getting: {item!r}")
         return item

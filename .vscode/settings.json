@@ -4,6 +4,7 @@
         "BGRX",
         "dotenv",
         "frombytes",
+        "Loggable",
         "upserting"
     ],
     // automatic on save formatting

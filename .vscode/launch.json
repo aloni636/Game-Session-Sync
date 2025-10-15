@@ -11,6 +11,12 @@
             "module": "experiments.accessability_events"
         },
         {
+            "name": "window_watcher",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "game_session_sync.windows_producers.window_watcher"
+        },
+        {
             "name": "ui_automation_events",
             "type": "debugpy",
             "request": "launch",
