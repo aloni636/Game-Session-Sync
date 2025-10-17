@@ -5,25 +5,15 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "accessability_events",
+            "name": "Python: Debug current file as module (required command-variable plugin)",
             "type": "debugpy",
             "request": "launch",
-            "module": "experiments.accessability_events"
+            // Build module name from the file's relative dir + basename 
+            // by replacing path separators with dots
+            "module": "${command:extension.commandvariable.file.relativeFileDotsNoExtension}"
         },
         {
-            "name": "window_watcher",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "game_session_sync.windows_producers.window_watcher"
-        },
-        {
-            "name": "ui_automation_events",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "experiments.ui_automation_events"
-        },
-        {
-            "name": "game_session_sync",
+            "name": "Python: game_session_sync",
             "type": "debugpy",
             "request": "launch",
             "module": "game_session_sync",
