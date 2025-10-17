@@ -27,11 +27,11 @@ class InputIdleWatcher(Producer):
     user32.GetLastInputInfo.restype = wintypes.BOOL
 
     def __init__(
-        self, queue: EventBus, polling_interval_ms: float, idle_seconds: float
+        self, queue: EventBus, polling_interval_ms: float, max_idle_seconds: float
     ) -> None:
-        self._queue = queue
-        self._polling_interval_ms = polling_interval_ms
-        self._idle_seconds = idle_seconds
+        self.queue = queue
+        self.polling_interval_ms = polling_interval_ms
+        self.max_idle_seconds = max_idle_seconds
         self._reported = False
         self._stop_event = Event()
 
@@ -54,24 +54,50 @@ class InputIdleWatcher(Producer):
         while not self._stop_event.is_set():
             idle_seconds = self._get_idle_seconds()
 
-            if idle_seconds >= self._idle_seconds and not self._reported:
-                event = InputIdleEvent(idle_seconds=idle_seconds)
+            if idle_seconds >= self.max_idle_seconds and not self._reported:
+                event = InputIdleEvent(idle_seconds)
 
-                await self._queue.put(event)
+                await self.queue.put(event)
                 self._reported = True
-            elif idle_seconds < self._idle_seconds and self._reported:
-                event = InputActiveEvent(idle_seconds=idle_seconds)
+            elif idle_seconds < self.max_idle_seconds and self._reported:
+                event = InputActiveEvent(idle_seconds)
 
-                await self._queue.put(event)
+                await self.queue.put(event)
                 self._reported = False
 
-            self.log.debug(
-                f"State: idle_seconds={idle_seconds} reported={self._reported}"
+            # Reduce unnecessary polling by stretching the interval when system is active
+            await_for = max(
+                self.max_idle_seconds - idle_seconds, self.polling_interval_ms / 1000
             )
+            self.log.debug(f"State: {idle_seconds=} {self._reported=} {await_for=}")
             try:
                 await asyncio.wait_for(
                     self._stop_event.wait(),
-                    timeout=self._polling_interval_ms / 1000,
+                    timeout=await_for,
                 )
             except asyncio.TimeoutError:
                 continue
+
+
+async def _main():
+    from ..log_helpers import Console, setup_test_logging
+
+    console = Console()
+    setup_test_logging(console)
+
+    queue = EventBus()
+    watcher = InputIdleWatcher(queue, 1000, 10)
+
+    try:
+        asyncio.create_task(watcher.run())
+        while True:
+            user_input = (await asyncio.to_thread(input, "[q: quit] >")).strip()
+            if user_input == "q":
+                break
+    finally:
+        watcher.stop()
+        console.kill()
+
+
+if __name__ == "__main__":
+    asyncio.run(_main())
