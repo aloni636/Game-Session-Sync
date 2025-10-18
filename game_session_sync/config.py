@@ -22,7 +22,7 @@ class ConnectionConfig:
 @dataclass(frozen=True)
 class SessionConfig:
     screenshot_watch_path: str
-    delete_manual_screenshot: bool
+    screenshot_staging_path: str
     screenshot_interval_sec: int
     minimum_session_gap_min: int
     phash_threshold: int

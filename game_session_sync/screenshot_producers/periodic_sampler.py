@@ -1,30 +1,46 @@
 import asyncio
-import logging
-from asyncio import Event
+import time
+from pathlib import Path
 
 import mss
-from PIL import Image
+import mss.tools
+
+from game_session_sync.screenshot_producers.utils import screenshot_filename
 
 from ..types import Producer
-from .types import PeriodicScreenshot, ScreenshotBus
 
 
+# TODO: Switch to DXcam and turbojpeg
 class PeriodicSampler(Producer):
-    def __init__(self, queue: ScreenshotBus, interval_sec: int) -> None:
-        self._queue = queue
-        self._interval_sec = interval_sec
-        self.log = logging.getLogger(self.__class__.__name__)
+    def __init__(self, interval_sec: int, target_dir: str, title: str) -> None:
+        self.target_dir = Path(target_dir)
+        self.title = title
+        self.interval_sec = interval_sec
 
     async def run(self):
-        while not self._stop_event.is_set():
-            with mss.mss() as sct:
+        next_time = time.perf_counter()
+        with mss.mss() as sct:
+            while not self._stop_event.is_set():
                 # TODO: select the monitor based on the game (fullscreen) window
                 sct_img = sct.grab(sct.monitors[0])  # all monitors combined
                 self.log.info(f"Took screenshot: {sct_img.size}")
-                img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-                screenshot = PeriodicScreenshot(img)
-                await self._queue.put(screenshot)
+                dct_path = self.target_dir / screenshot_filename(self.title, ".png")
+                mss.tools.to_png(sct_img.rgb, sct_img.size, output=dct_path)
+
+                # sct.grab and to_png are slow and require drift handling
+                next_time += self.interval_sec
+                sleep = next_time - time.perf_counter()
+                if sleep < 0:
+                    next_time = time.perf_counter()  # reset if too late
+                    sleep = self.interval_sec
                 try:
-                    await asyncio.wait_for(self._stop_event.wait(), self._interval_sec)
+                    await asyncio.wait_for(self._stop_event.wait(), sleep)
                 except asyncio.TimeoutError:
                     continue
+
+
+if __name__ == "__main__":
+    from game_session_sync.test_helpers import producer_test_run
+
+    watcher = PeriodicSampler(15, "./images", "Deus Ex Mankind Divided")
+    asyncio.run(producer_test_run(watcher))

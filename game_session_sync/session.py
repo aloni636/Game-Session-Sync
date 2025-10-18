@@ -35,7 +35,6 @@ class Session:
         self._watcher = ScreenshotWatcher(
             self._queue,
             s_config.screenshot_watch_path,
-            s_config.delete_manual_screenshot,
         )
         self._uploader = uploader
         self.log = logging.getLogger(f"{self.__class__.__name__}:{self.title!r}")

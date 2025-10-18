@@ -3,81 +3,72 @@ import logging
 import os
 from asyncio import Event
 from pathlib import Path
-from time import sleep
 
-from PIL import Image
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
+from game_session_sync.screenshot_producers.utils import screenshot_filename
+
 from ..types import Producer
-from .types import ManualScreenshot, ScreenshotBus
 
 
-def resolve_path(path: str):
+def resolve_path(path: str) -> str:
     return str(Path(path).expanduser().resolve(strict=True))
 
 
 class _FileWatcherHandler(FileSystemEventHandler):
-    def __init__(
-        self,
-        loop: asyncio.AbstractEventLoop,
-        queue: ScreenshotBus,
-        delete_after_push: bool,
-    ) -> None:
+    def __init__(self, target_dir: str, title: str) -> None:
         super().__init__()
-        self._loop = loop
-        self._queue = queue
-        self._delete_after_push = delete_after_push
+        self.target_dir: Path = Path(target_dir)
+        self.title = title
         self.log = logging.getLogger(self.__class__.__name__)
+
+    # NOTE: on_closed does not actually provide any events in Windows for my use case
+    # def on_closed(self, event: FileClosedEvent) -> None:
 
     def on_created(self, event: FileSystemEvent) -> None:
         if event.is_directory:
             return
 
         # watchdog may supply bytes on some backends; normalize to str.
-        src_path = os.fsdecode(event.src_path)
-        if not src_path.endswith(".png"):
-            self.log.warning(f"Found screenshot with unexpected prefix: {src_path}")
+        src_path = Path(os.fsdecode(event.src_path))
+
+        if src_path.suffix != ".png":
+            self.log.warning(f"Manual screenshot with unexpected suffix: {src_path!r}")
             return
-        sleep(1)
-        self.log.info(f"Opening manually shot screenshot: {src_path}")
-        with Image.open(src_path) as img:
-            img.load()
-        screenshot = ManualScreenshot(img)
-        self.log.info(f"Pushing manually shot screenshot to queue...")
-        self._loop.call_soon_threadsafe(self._queue.put_nowait, screenshot)
-        if self._delete_after_push:
-            os.remove(src_path)
-            self.log.info(f"Deleting manual screenshot at path: {src_path}")
+
+        dst_path = self.target_dir / screenshot_filename(
+            self.title, src_path.suffix, manual=True
+        )
+        self.log.info(f"Moving: {src_path!r} ---> {dst_path!r}")
+        src_path.rename(dst_path)
 
 
 class ScreenshotWatcher(Producer):
-    def __init__(
-        self,
-        queue: ScreenshotBus,
-        target_dir: str,
-        delete_after_push: bool = False,
-    ) -> None:
-        self._queue = queue
-        self._target_dir = resolve_path(target_dir)
-        self._delete_after_push = delete_after_push
+    def __init__(self, source_dir: str, target_dir: str, title: str) -> None:
+        self.source_dir = resolve_path(source_dir)
+        self.target_dir = resolve_path(target_dir)
+        self.title = title
         self._stop_evt = Event()
-        self.log = logging.getLogger(self.__class__.__name__)
 
     # wrap observer start and stop with async semantics
     async def run(self):
-        self._stop_evt.clear()
-        loop = asyncio.get_running_loop()
-        event_handler = _FileWatcherHandler(loop, self._queue, self._delete_after_push)
+        event_handler = _FileWatcherHandler(self.target_dir, self.title)
         observer = Observer()
-        observer.schedule(event_handler, self._target_dir, recursive=True)
+        observer.schedule(event_handler, self.source_dir, recursive=True)
 
-        self.log.info("Starting watchdog observer")
         observer.start()
-
         try:
             await self._stop_evt.wait()
         finally:
             observer.stop()
             await asyncio.to_thread(observer.join)
-            self.log.info("Watchdog observer fully stopped")
+
+
+if __name__ == "__main__":
+    from game_session_sync.test_helpers import producer_test_run
+
+    watcher = ScreenshotWatcher(
+        r"~\Pictures\Screenshots", "./images", "Deus Ex Mankind Divided"
+    )
+    asyncio.run(producer_test_run(watcher))
