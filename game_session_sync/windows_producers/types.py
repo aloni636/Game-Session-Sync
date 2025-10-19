@@ -14,46 +14,46 @@ class BaseWindowEvent:
 
 
 @dataclass(slots=True)
-class _InputEvent:
+class BaseInputEvent:
     idle_seconds: float
     timestamp: datetime = _now_field
 
 
+# NOTE: Not in use as there's no prep work to do before starting a session
+# @dataclass(slots=True)
+# class WindowOpenEvent(BaseWindowEvent):
+#     pass
+
+
 @dataclass(slots=True)
-class WindowOpenEvent(BaseWindowEvent):
+class GameMinimizedEvent(BaseWindowEvent):
     pass
 
 
 @dataclass(slots=True)
-class WindowMinimizedEvent(BaseWindowEvent):
+class GameFullscreenEvent(BaseWindowEvent):
     pass
 
 
 @dataclass(slots=True)
-class WindowFullscreenEvent(BaseWindowEvent):
+class GameCloseEvent(BaseWindowEvent):
     pass
 
 
 @dataclass(slots=True)
-class WindowCloseEvent(BaseWindowEvent):
+class InputIdleEvent(BaseInputEvent):
     pass
 
 
 @dataclass(slots=True)
-class InputIdleEvent(_InputEvent):
-    pass
-
-
-@dataclass(slots=True)
-class InputActiveEvent(_InputEvent):
+class InputActiveEvent(BaseInputEvent):
     pass
 
 
 EventBus: TypeAlias = LoggingQueue[
-    WindowOpenEvent
-    | WindowMinimizedEvent
-    | WindowFullscreenEvent
-    | WindowCloseEvent
+    GameMinimizedEvent
+    | GameFullscreenEvent
+    | GameCloseEvent
     | InputIdleEvent
     | InputActiveEvent
 ]

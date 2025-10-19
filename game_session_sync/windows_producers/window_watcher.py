@@ -21,13 +21,13 @@ import win32event
 
 from game_session_sync.windows_producers.types import (
     EventBus,
-    WindowCloseEvent,
-    WindowFullscreenEvent,
-    WindowMinimizedEvent,
+    GameCloseEvent,
+    GameFullscreenEvent,
+    GameMinimizedEvent,
 )
 from game_session_sync.windows_producers.utils import async_debounce
 
-log = logging.getLogger("WindowWatcher")
+log = logging.getLogger(__name__)
 
 
 def _extract_title(exe: str | None, patterns: list[re.Pattern]) -> str | None:
@@ -89,7 +89,7 @@ class _ProcessExitWatcher:
 
         def done_callback(_):
             self._tasks.pop(pid)
-            self.queue.put_nowait(WindowCloseEvent(title))
+            self.queue.put_nowait(GameCloseEvent(title))
 
         self._tasks[pid] = (task, done_callback)
         task.add_done_callback(done_callback)
@@ -298,13 +298,13 @@ class WindowEventWatcher:
         # new foreground window is not a game while the last window was a game
         if title is None and self._last_foreground_title is not None:
             self.queue.put_nowait(
-                WindowMinimizedEvent(self._last_foreground_title, timestamp)
+                GameMinimizedEvent(self._last_foreground_title, timestamp)
             )
             self._last_foreground_title = None
-        # new foreground window is a fullscreen game while the last window
-        # was not the same game (i.e. refocus from hidden windows)
+        # new foreground window is a fullscreen game while the last window was not
+        # the same game (avoid sending fullscreen after refocus from hidden windows)
         elif title and _is_fullscreen(hwnd) and self._last_foreground_title != title:
-            self.queue.put_nowait(WindowFullscreenEvent(title, timestamp))
+            self.queue.put_nowait(GameFullscreenEvent(title, timestamp))
             self._process_exit_watcher.add_hwnd(hwnd)
             self._last_foreground_title = title
 
@@ -319,7 +319,7 @@ class WindowEventWatcher:
         title = _extract_title(_hwnd_to_exe(hwnd), self.exe_patterns)
 
         if title is not None and _is_fullscreen(hwnd):
-            self.queue.put_nowait(WindowFullscreenEvent(title, timestamp))
+            self.queue.put_nowait(GameFullscreenEvent(title, timestamp))
             self._process_exit_watcher.add_hwnd(hwnd)
 
     async def run(self):

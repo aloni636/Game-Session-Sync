@@ -1,25 +1,25 @@
-from ..screenshot_producers.screenshot_watcher import ScreenshotWatcher
 from .input_idle_watcher import InputIdleWatcher
-from .window_watcher import WindowEventWatcher
 from .types import (
+    BaseInputEvent,
+    BaseWindowEvent,
     EventBus,
+    GameCloseEvent,
+    GameFullscreenEvent,
+    GameMinimizedEvent,
     InputActiveEvent,
     InputIdleEvent,
-    WindowCloseEvent,
-    WindowFullscreenEvent,
-    WindowMinimizedEvent,
-    WindowOpenEvent,
 )
+from .window_watcher import WindowEventWatcher
 
 __all__ = [
     "InputIdleWatcher",
     "WindowEventWatcher",
-    "ScreenshotWatcher",
     "EventBus",
-    "WindowOpenEvent",
-    "WindowCloseEvent",
-    "WindowFullscreenEvent",
-    "WindowMinimizedEvent",
+    "BaseWindowEvent",
+    "BaseInputEvent",
+    "GameCloseEvent",
+    "GameFullscreenEvent",
+    "GameMinimizedEvent",
     "InputActiveEvent",
     "InputIdleEvent",
 ]

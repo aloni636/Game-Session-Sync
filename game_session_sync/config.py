@@ -25,6 +25,7 @@ class SessionConfig:
     screenshot_staging_path: str
     screenshot_interval_sec: int
     minimum_session_gap_min: int
+    minimum_session_length_min: int
     phash_threshold: int
     # minimum_session_length_min: int
 
