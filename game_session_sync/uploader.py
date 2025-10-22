@@ -60,6 +60,7 @@ class Uploader:
         self.log = logging.getLogger(self.__class__.__name__)
 
     async def _upload(self, source_dir: Path) -> bool:
+        self._stop_event.clear()
         # TODO: Use session_dirname to track session time-bounds by exact process lifetime
 
         # Design:
@@ -84,7 +85,7 @@ class Uploader:
         # extract timestamp, groupby title
         by_title: dict[str, list[_metadata]] = {}
         for path in screenshots:
-            title, timestamp, _ = parse_screenshot_filename(str(path))
+            title, timestamp, _ = parse_screenshot_filename(path.name, self.user_tz)
             by_title.setdefault(title, []).append((path, timestamp))
 
         # sortby timestamp, split by consecutive timestamp diff
@@ -116,7 +117,7 @@ class Uploader:
             info = await self._last_session(title)
             if (
                 info is None  # new session
-                or (start - info.last_end).total_seconds()
+                or (start - info.last_end).total_seconds() / 60
                 > self.minimum_session_gap_min  # gap too big
             ):
                 info = await self._new_session(title, start)
@@ -147,11 +148,14 @@ class Uploader:
             )
         return True
 
+    # upload process cannot be run in multiple directories at the same time
+    # because they both will race to delete files from it
     async def upload(self, source_dir: str):
         dirpath = Path(source_dir)
         task = self._upload_task.get(dirpath)
         if task is None:
             task = asyncio.create_task(self._upload(dirpath))
+            task.add_done_callback(lambda _: self._upload_task.pop(dirpath, None))
             self._upload_task[dirpath] = task
         await task
 
@@ -413,20 +417,21 @@ async def _main():
         config.session.minimum_session_gap_min,
         config.session.minimum_session_length_min,
     )
-    async with asyncio.TaskGroup() as tg:
-        while True:
-            user_input = (
-                await asyncio.to_thread(input, "[q: quit | u: upload | s: stop upload]")
-            ).strip()
-            if user_input == "q":
-                break
-            if user_input == "u":
-                tg.create_task(uploader.upload(OBSERVATORY))
-            if user_input == "s":
-                uploader.stop()
-
-    uploader.stop()
-    console.kill()
+    try:
+        async with asyncio.TaskGroup() as tg:
+            while True:
+                user_input = (
+                    await asyncio.to_thread(input, "[q: quit | u: upload | s: stop upload] > ")
+                ).strip()
+                if user_input == "q":
+                    break
+                if user_input == "u":
+                    tg.create_task(uploader.upload(OBSERVATORY))
+                if user_input == "s":
+                    uploader.stop()
+    finally:
+        uploader.stop()
+        console.kill()
 
 
 if __name__ == "__main__":

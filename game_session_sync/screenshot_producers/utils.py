@@ -1,32 +1,38 @@
 import re
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 
 def screenshot_filename(
-    title: str, suffix: str, manual: bool = False, timestamp: datetime | None = None
+    title: str, suffix: str, zoneinfo: ZoneInfo | None, manual: bool = False
 ):
-    timestamp = timestamp or datetime.now()  # NOTE: local timezone
-    timestamp_str = timestamp.strftime("%Y.%m.%d - %H.%M.%S.%f")[
+    timestamp = datetime.now(zoneinfo)
+    timestamp_str = timestamp.strftime("%Y.%m.%d %H.%M.%S.%f")[
         :-3
     ]  # keep 3 digits = milliseconds
-    manual_str = " [Manual]" if manual else ""
-    filename = f"{title} {timestamp_str}{manual_str}{suffix}"
+    offset = timestamp.strftime("%z")
+    manual_str = "manual" if manual else "auto"
+    filename = f"{title} {timestamp_str} {offset} {manual_str}{suffix}"
     return filename
 
 
-def parse_screenshot_filename(filename: str) -> tuple[str, datetime, bool]:
-    pattern = re.compile(
-        r"^(.+?) (\d{4}\.\d{2}\.\d{2} - \d{2}\.\d{2}\.\d{2}\.\d{3})( \[Manual\])?(.+)$"
+def parse_screenshot_filename(
+    filename: str, zoneinfo: ZoneInfo | None
+) -> tuple[str, datetime, bool]:
+    matches = re.match(
+        r"^(.+?) (\d{4}\.\d{2}\.\d{2} \d{2}\.\d{2}\.\d{2}\.\d{3}) ([+-]\d{4}) (manual|auto)(.+)$",
+        filename,
     )
-
-    matches = pattern.match(filename)
     if not matches:
         raise ValueError(f"Invalid filename format: {filename}")
 
-    title, timestamp_str, manual_flag, suffix = matches.groups()
-    timestamp = datetime.strptime(timestamp_str, "%Y.%m.%d - %H.%M.%S.%f")
-    manual = bool(manual_flag)
+    title, timestamp_str, offset, manual_flag, _ = matches.groups()
 
+    timestamp_str = timestamp_str + "000"
+    timestamp = datetime.strptime(
+        f"{timestamp_str} {offset}", "%Y.%m.%d %H.%M.%S.%f %z"
+    ).astimezone(zoneinfo)
+    manual = manual_flag == "manual"
     return title, timestamp, manual
 
 

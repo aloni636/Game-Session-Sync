@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from asyncio import Event
+from zoneinfo import ZoneInfo
 
 from .config import Config
 from .screenshot_producers import *
@@ -28,6 +29,7 @@ class GameSessionSync:
             config.session.minimum_session_length_min,
         )
         self.s_config = config.session
+        self.tz = ZoneInfo(config.connection.notion_user_tz)
 
         self.active_session: Session | None = None
         self._last_session_stop_event: BaseInputEvent | BaseWindowEvent | None = None
@@ -38,7 +40,7 @@ class GameSessionSync:
         self.uploader.stop()
 
         if self.active_session is None:
-            self.active_session = Session(title, self.s_config)
+            self.active_session = Session(title, self.s_config, self.tz)
 
         same_title = self.active_session.title == title
         active = self.active_session.is_active
@@ -52,7 +54,7 @@ class GameSessionSync:
             self.active_session.stop()
             active = False
         if not same_title and not active:
-            self.active_session = Session(title, self.s_config)
+            self.active_session = Session(title, self.s_config, self.tz)
         await self.active_session.run()
 
     async def _resume_session(self):

@@ -3,6 +3,7 @@ import logging
 import os
 from asyncio import Event
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
@@ -17,10 +18,11 @@ def resolve_path(path: str | Path) -> str:
 
 
 class _FileWatcherHandler(FileSystemEventHandler):
-    def __init__(self, target_dir: str, title: str) -> None:
+    def __init__(self, target_dir: str, title: str, tz: ZoneInfo | None) -> None:
         super().__init__()
         self.target_dir: Path = Path(target_dir)
         self.title = title
+        self.tz = tz
         self.log = logging.getLogger(self.__class__.__name__)
 
     # NOTE: on_closed does not actually provide any events in Windows for my use case
@@ -38,22 +40,25 @@ class _FileWatcherHandler(FileSystemEventHandler):
             return
 
         dst_path = self.target_dir / screenshot_filename(
-            self.title, src_path.suffix, manual=True
+            self.title, src_path.suffix, self.tz, manual=True
         )
         self.log.info(f"Moving: {src_path!r} ---> {dst_path!r}")
         src_path.rename(dst_path)
 
 
 class ScreenshotWatcher(Producer):
-    def __init__(self, source_dir: str, target_dir: str, title: str) -> None:
+    def __init__(
+        self, source_dir: str, target_dir: str, title: str, tz: ZoneInfo | None
+    ) -> None:
         self.source_dir = resolve_path(source_dir)
         self.target_dir = resolve_path(target_dir)
         self.title = title
+        self.tz = tz
         self._stop_evt = Event()
 
     # wrap observer start and stop with async semantics
     async def run(self):
-        event_handler = _FileWatcherHandler(self.target_dir, self.title)
+        event_handler = _FileWatcherHandler(self.target_dir, self.title, self.tz)
         observer = Observer()
         observer.schedule(event_handler, self.source_dir, recursive=True)
 
@@ -69,6 +74,9 @@ if __name__ == "__main__":
     from game_session_sync.test_helpers import producer_test_run
 
     watcher = ScreenshotWatcher(
-        r"~\Pictures\Screenshots", "./images", "Deus Ex Mankind Divided"
+        r"~\Pictures\Screenshots",
+        "./images",
+        "Deus Ex Mankind Divided",
+        None,
     )
     asyncio.run(producer_test_run(watcher))

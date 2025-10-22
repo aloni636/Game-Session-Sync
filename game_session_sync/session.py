@@ -1,4 +1,5 @@
 from asyncio import TaskGroup
+from zoneinfo import ZoneInfo
 
 from windows_producers import *
 
@@ -7,13 +8,10 @@ from .screenshot_producers import *
 
 
 class Session:
-    def __init__(
-        self,
-        title: str,
-        s_config: SessionConfig,
-    ) -> None:
+    def __init__(self, title: str, s_config: SessionConfig, tz: ZoneInfo) -> None:
         self.title = title
         self.s_config = s_config
+        self.tz = tz
         self.is_active: bool = False
 
     async def run(self):
@@ -23,11 +21,13 @@ class Session:
             self.s_config.screenshot_interval_sec,
             self.s_config.screenshot_staging_path,
             self.title,
+            self.tz,
         )
         self._screenshot_watcher = ScreenshotWatcher(
             self.s_config.screenshot_watch_path,
             self.s_config.screenshot_staging_path,
             self.title,
+            self.tz,
         )
         self.is_active = True
         async with TaskGroup() as tg:

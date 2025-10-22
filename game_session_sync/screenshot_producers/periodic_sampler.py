@@ -1,6 +1,7 @@
 import asyncio
 import time
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import mss
 import mss.tools
@@ -12,10 +13,13 @@ from ..types import Producer
 
 # TODO: Switch to DXcam and turbojpeg
 class PeriodicSampler(Producer):
-    def __init__(self, interval_sec: int, target_dir: str, title: str) -> None:
+    def __init__(
+        self, interval_sec: int, target_dir: str, title: str, tz: ZoneInfo | None
+    ) -> None:
+        self.interval_sec = interval_sec
         self.target_dir = Path(target_dir)
         self.title = title
-        self.interval_sec = interval_sec
+        self.tz = tz
 
     async def run(self):
         next_time = time.perf_counter()
@@ -24,7 +28,9 @@ class PeriodicSampler(Producer):
                 # TODO: select the monitor based on the game (fullscreen) window
                 sct_img = sct.grab(sct.monitors[0])  # all monitors combined
                 self.log.info(f"Took screenshot: {sct_img.size}")
-                dct_path = self.target_dir / screenshot_filename(self.title, ".png")
+                dct_path = self.target_dir / screenshot_filename(
+                    self.title, ".png", self.tz
+                )
                 mss.tools.to_png(sct_img.rgb, sct_img.size, output=dct_path)
 
                 # sct.grab and to_png are slow and require drift handling
@@ -40,7 +46,9 @@ class PeriodicSampler(Producer):
 
 
 if __name__ == "__main__":
+    from datetime import datetime
+
     from game_session_sync.test_helpers import producer_test_run
 
-    watcher = PeriodicSampler(15, "./images", "Deus Ex Mankind Divided")
+    watcher = PeriodicSampler(15, "./images", "Deus Ex Mankind Divided", None)
     asyncio.run(producer_test_run(watcher))

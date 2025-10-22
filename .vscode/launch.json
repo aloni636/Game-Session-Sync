@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Debug current file as module (required command-variable plugin)",
+            "name": "Python: Current File as Module (via command-variable)",
             "type": "debugpy",
             "request": "launch",
             // Build module name from the file's relative dir + basename 
