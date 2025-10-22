@@ -12,7 +12,7 @@ from game_session_sync.screenshot_producers.utils import screenshot_filename
 from ..types import Producer
 
 
-def resolve_path(path: str) -> str:
+def resolve_path(path: str | Path) -> str:
     return str(Path(path).expanduser().resolve(strict=True))
 
 
