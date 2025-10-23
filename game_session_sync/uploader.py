@@ -11,7 +11,10 @@ from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive, GoogleDriveFile
 
 from game_session_sync.config import ConnectionConfig, NotionProperties
-from game_session_sync.screenshot_producers.utils import parse_screenshot_filename
+from game_session_sync.screenshot_producers.utils import (
+    build_session_name,
+    parse_screenshot_filename,
+)
 
 IO_TIMEOUT_SEC = 10
 
@@ -213,7 +216,6 @@ class Uploader:
             if q.get("results"):
                 notion_page = q["results"][0]
                 props = notion_page["properties"]
-                session_id = props[self.notion_props.session_id]
 
                 def get_utc_datetime(prop: str):
                     date_prop = props[prop]["date"]
@@ -229,9 +231,9 @@ class Uploader:
                     f"Last Notion session: end: {last_end.isoformat(timespec='seconds')}"
                 )
 
-                title_parent = await self._new_drive_dir(title, self.drive_root_id)
+                session_name = build_session_name(title, last_start, self.user_tz)
                 session_folder = await self._new_drive_dir(
-                    self._drive_timestamp(last_start), title_parent["id"]
+                    session_name, self.drive_root_id
                 )
                 return _SessionInfo(
                     last_end,
@@ -251,16 +253,12 @@ class Uploader:
         return None
 
     async def _new_session(self, title: str, start: datetime) -> _SessionInfo:
-        start_str = self._drive_timestamp(start)
-        session_id = f"{title} {start_str}"
-
-        title_parent = await self._new_drive_dir(title, self.drive_root_id)
-        session_folder = await self._new_drive_dir(start_str, title_parent["id"])
+        session_name = build_session_name(title, start, self.user_tz)
+        session_folder = await self._new_drive_dir(session_name, self.drive_root_id)
 
         notion_page = await self._new_notion_page(
-            session_id,
+            session_name,
             title,
-            session_id,
             start,
             start,
             self._get_drive_embed_link(session_folder),
@@ -338,9 +336,6 @@ class Uploader:
     def _notion_local_iso(self, dt: datetime) -> str:
         return dt.astimezone(self.user_tz).isoformat(timespec="seconds")
 
-    def _drive_timestamp(self, dt: datetime) -> str:
-        return dt.astimezone(self.user_tz).strftime("%Y-%m-%d %H_%M")
-
     async def _update_notion_timestamp(self, page_id: str, end: datetime):
         props = {
             self.notion_props.end: {
@@ -356,7 +351,6 @@ class Uploader:
         self,
         name: str,
         title: str,
-        session_id: str,
         start: datetime,
         end: datetime,
         embed_link: str,
@@ -366,9 +360,6 @@ class Uploader:
         props = {
             self.notion_props.name: {"title": [{"text": {"content": name}}]},
             self.notion_props.title: {"select": {"name": title}},
-            self.notion_props.session_id: {
-                "rich_text": [{"text": {"content": session_id}}]
-            },
             self.notion_props.start: {
                 "date": {
                     "start": self._notion_local_iso(start),
@@ -383,13 +374,21 @@ class Uploader:
             },
             self.notion_props.drive_link: {"url": embed_link},
         }
-        # query for the page with the session id
+        # query for an existing page matching the immutable title/start combo
         q: dict[str, Any] = await asyncio.wait_for(
             self._notion.databases.query(
                 database_id=self.notion_db_id,
                 filter={
-                    "property": self.notion_props.session_id,
-                    "rich_text": {"equals": session_id},
+                    "and": [
+                        {
+                            "property": self.notion_props.title,
+                            "select": {"equals": title},
+                        },
+                        {
+                            "property": self.notion_props.start,
+                            "date": {"equals": self._notion_local_iso(start)},
+                        },
+                    ]
                 },
                 page_size=1,
             ),
@@ -400,12 +399,12 @@ class Uploader:
             page_id = q["results"][0]["id"]
             # avoid updating page name to allow the user to modify the page title during a session
             props.pop(self.notion_props.name, None)
-            self.log.info(f"Updating Notion page {page_id} for session {session_id}")
+            self.log.info(f"Updating Notion page {page_id} for session {name}")
             page = await self._notion.pages.update(page_id, properties=props)
         # insert branch
         else:
             self.log.info(
-                f"Creating Notion page for session {session_id} in database {self.notion_db_id}"
+                f"Creating Notion page for session {name} in database {self.notion_db_id}"
             )
             page = await self._notion.pages.create(
                 parent={"database_id": self.notion_db_id},

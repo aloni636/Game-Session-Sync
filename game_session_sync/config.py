@@ -29,11 +29,11 @@ class SessionConfig:
     phash_threshold: int
     delete_after_upload: bool
 
+
 @dataclass(frozen=True)
 class NotionProperties:
     name: str
     title: str
-    session_id: str
     start: str
     end: str
     drive_link: str

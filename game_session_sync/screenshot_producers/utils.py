@@ -35,6 +35,14 @@ def parse_screenshot_filename(
     return title, timestamp
 
 
+def build_session_name(title: str, start: datetime, zoneinfo: ZoneInfo) -> str:
+    """
+    Produce a canonical session name shared by Notion and Drive.
+    Example: "Some Game 2024-03-14 21_45"
+    """
+    return f"{title} {start.astimezone(zoneinfo).strftime('%Y-%m-%d %H_%M')}"
+
+
 # def session_dirname(title: str, start: datetime, end: datetime | None = None):
 #     start_str = start.strftime("%Y.%m.%d - %H.%M.%S")
 #     end_str = ""
