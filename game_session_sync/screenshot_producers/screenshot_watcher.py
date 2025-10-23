@@ -9,18 +9,13 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from game_session_sync.screenshot_producers.utils import screenshot_filename
-
 from ..types import Producer
 
 
-def resolve_path(path: str | Path) -> str:
-    return str(Path(path).expanduser().resolve(strict=True))
-
-
 class _FileWatcherHandler(FileSystemEventHandler):
-    def __init__(self, target_dir: str, title: str, tz: ZoneInfo) -> None:
+    def __init__(self, target_dir: Path, title: str, tz: ZoneInfo) -> None:
         super().__init__()
-        self.target_dir: Path = Path(target_dir)
+        self.target_dir = target_dir
         self.title = title
         self.tz = tz
         self.log = logging.getLogger(self.__class__.__name__)
@@ -48,10 +43,10 @@ class _FileWatcherHandler(FileSystemEventHandler):
 
 class ScreenshotWatcher(Producer):
     def __init__(
-        self, source_dir: str, target_dir: str, title: str, tz: ZoneInfo
+        self, source_dir: Path, target_dir: Path, title: str, tz: ZoneInfo
     ) -> None:
-        self.source_dir = resolve_path(source_dir)
-        self.target_dir = resolve_path(target_dir)
+        self.source_dir = source_dir
+        self.target_dir = target_dir
         self.title = title
         self.tz = tz
         self._stop_evt = Event()
@@ -60,7 +55,7 @@ class ScreenshotWatcher(Producer):
     async def run(self):
         event_handler = _FileWatcherHandler(self.target_dir, self.title, self.tz)
         observer = Observer()
-        observer.schedule(event_handler, self.source_dir, recursive=True)
+        observer.schedule(event_handler, str(self.source_dir), recursive=True)
 
         observer.start()
         try:
@@ -72,12 +67,13 @@ class ScreenshotWatcher(Producer):
 
 if __name__ == "__main__":
     import tzlocal
+    from pathlib import Path
 
     from game_session_sync.test_helpers import producer_test_run
 
     watcher = ScreenshotWatcher(
-        r"~\Pictures\Screenshots",
-        "./images",
+        Path(r"~\Pictures\Screenshots").expanduser(),
+        Path("./images"),
         "Deus Ex Mankind Divided",
         tzlocal.get_localzone(),
     )

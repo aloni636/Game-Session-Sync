@@ -42,7 +42,7 @@ class Uploader:
         self,
         c_config: ConnectionConfig,
         notion_properties: NotionProperties,
-        source_dir: str,
+        source_dir: Path,
         minimum_session_gap_min: int,
         minimum_session_length_min: int,
         delete_after_upload: bool,
@@ -56,13 +56,13 @@ class Uploader:
         self.minimum_session_length_min = minimum_session_length_min
         self.delete_after_upload = delete_after_upload
 
-        self.source_dir = Path(source_dir)
-        self.trash_dir = Path(self.source_dir / TRASH_DIRNAME)
+        self.source_dir = source_dir
+        self.trash_dir = self.source_dir / TRASH_DIRNAME
         if not self.delete_after_upload:
             self.trash_dir.mkdir(exist_ok=True)
 
         self._notion = AsyncClient(auth=c_config.notion_api_token)
-        gauth = GoogleAuth(c_config.drive_settings_file)
+        gauth = GoogleAuth(str(c_config.drive_settings_file))
         if gauth.access_token_expired:
             gauth.LocalWebserverAuth()
         self._drive = GoogleDrive(gauth)
@@ -438,12 +438,11 @@ class Uploader:
 async def _main():
     from .config import load_config
     from .log_helpers import Console, setup_test_logging
-
-    OBSERVATORY = "./observatory"
+    OBSERVATORY = Path("./observatory")
     console = Console()
     setup_test_logging(console)
 
-    config = load_config("config.dev.yaml")
+    config = load_config(Path("config.dev.yaml"))
     uploader = Uploader(
         config.connection,
         config.notion_properties,

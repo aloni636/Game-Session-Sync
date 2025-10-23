@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from pathlib import Path
 
 from .app import GameSessionSync
 from .config import load_config
@@ -12,7 +13,7 @@ log = logging.getLogger()
 async def main():
     setup_logging()
     config_path = os.environ.get("CONFIG_YAML", "config.yaml")
-    config = load_config(config_path)
+    config = load_config(Path(config_path))
     app = GameSessionSync(config)
     try:
         await app.run()
