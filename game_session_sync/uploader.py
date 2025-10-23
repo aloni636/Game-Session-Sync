@@ -17,15 +17,11 @@ from game_session_sync.screenshot_producers.utils import (
 )
 
 IO_TIMEOUT_SEC = 10
-
-_metadata: TypeAlias = tuple[Path, datetime]
-
-
-T = TypeVar("T")
-
-
 TRASH_DIRNAME = ".trash"
 CONCURRENT_UPLOAD_WORKERS = 8
+
+_metadata: TypeAlias = tuple[Path, datetime]
+T = TypeVar("T")
 
 
 def chunk_list(lst: list[T], n: int) -> Iterator[list[T]]:
@@ -56,6 +52,7 @@ class Uploader:
         self.user_tz = ZoneInfo(c_config.notion_user_tz)
         self.notion_props = notion_properties
         self.minimum_session_gap_min = minimum_session_gap_min
+        # TODO: integrate minimum length cleanup into session upload
         self.minimum_session_length_min = minimum_session_length_min
         self.delete_after_upload = delete_after_upload
 
@@ -331,6 +328,7 @@ class Uploader:
             )
             file.SetContentFile(path)
             file.Upload()
+            file.content.close()
             return file
 
         file = await asyncio.wait_for(asyncio.to_thread(f), IO_TIMEOUT_SEC)
@@ -466,6 +464,7 @@ async def _main():
                 if user_input == "q":
                     break
                 if user_input == "u":
+                    # await to pull exceptions from task into current coroutine
                     await tg.create_task(uploader.upload())
                 if user_input == "s":
                     uploader.stop()
