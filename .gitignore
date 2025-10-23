@@ -12,6 +12,7 @@ credentials.json
 dev.env
 config.yaml
 config.dev.yaml
+config.staging.yaml
 
 # miscellaneous 
 *.log

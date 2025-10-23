@@ -1,10 +1,9 @@
 from asyncio import TaskGroup
 from zoneinfo import ZoneInfo
 
-from windows_producers import *
-
 from .config import SessionConfig
 from .screenshot_producers import *
+from .windows_producers import *
 
 
 class Session:

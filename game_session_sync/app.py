@@ -22,13 +22,15 @@ class GameSessionSync:
             config.monitor.input_idle_sec,
         )
 
+        self.s_config = config.session
         self.uploader = Uploader(
             config.connection,
             config.notion_properties,
+            self.s_config.screenshot_staging_path,
             config.session.minimum_session_gap_min,
             config.session.minimum_session_length_min,
+            config.session.delete_after_upload,
         )
-        self.s_config = config.session
         self.tz = ZoneInfo(config.connection.notion_user_tz)
 
         self.active_session: Session | None = None
@@ -72,7 +74,7 @@ class GameSessionSync:
 
     async def _stop_session(self, event: BaseInputEvent | BaseWindowEvent):
         self._pause_session(event)
-        await self.uploader.upload(self.s_config.screenshot_staging_path)
+        await self.uploader.upload()
 
     async def _run(self):
         # Task groups propagate errors instead of being isolated in Task objects
