@@ -24,6 +24,10 @@ _metadata: TypeAlias = tuple[Path, datetime]
 T = TypeVar("T")
 
 
+TRASH_DIRNAME = ".trash"
+CONCURRENT_UPLOAD_WORKERS = 8
+
+
 def chunk_list(lst: list[T], n: int) -> Iterator[list[T]]:
     for i in range(0, len(lst), n):
         yield lst[i : i + n]
@@ -42,6 +46,7 @@ class Uploader:
         self,
         c_config: ConnectionConfig,
         notion_properties: NotionProperties,
+        source_dir: str,
         minimum_session_gap_min: int,
         minimum_session_length_min: int,
         delete_after_upload: bool,
@@ -54,6 +59,11 @@ class Uploader:
         self.minimum_session_length_min = minimum_session_length_min
         self.delete_after_upload = delete_after_upload
 
+        self.source_dir = Path(source_dir)
+        self.trash_dir = Path(self.source_dir / TRASH_DIRNAME)
+        if not self.delete_after_upload:
+            self.trash_dir.mkdir(exist_ok=True)
+
         self._notion = AsyncClient(auth=c_config.notion_api_token)
         gauth = GoogleAuth(c_config.drive_settings_file)
         if gauth.access_token_expired:
@@ -61,10 +71,10 @@ class Uploader:
         self._drive = GoogleDrive(gauth)
 
         self._stop_event = asyncio.Event()
-        self._upload_task: dict[Path, asyncio.Task] = {}
+        self._upload_task: asyncio.Task | None = None
         self.log = logging.getLogger(self.__class__.__name__)
 
-    async def _upload(self, source_dir: Path) -> bool:
+    async def _upload(self) -> bool:
         self._stop_event.clear()
         # TODO: Use session_dirname to track session time-bounds by exact process lifetime
 
@@ -82,7 +92,7 @@ class Uploader:
         #   This will avoid deleting sessions which are in-fact just a game crash (for example).
         #   It is guaranteed in the uploader logic that there would be no 2 consecutive sessions of the same title which are closer than self.minimum_session_gap_min
 
-        screenshots = [f for f in source_dir.iterdir() if f.is_file()]
+        screenshots = [f for f in self.source_dir.iterdir() if f.is_file()]
         if not screenshots:
             return True
 
@@ -125,16 +135,18 @@ class Uploader:
         async def upload_postprocess(
             page_id: str,
             end: datetime,
-            files_to_delete: list[Path] | None = None,
+            files_to_cleanup: list[Path],
         ):
             await self._update_notion_timestamp(
                 page_id,
                 end,
             )
-            if self.delete_after_upload and files_to_delete:
-                for f in files_to_delete:
+            for f in files_to_cleanup:
+                if self.delete_after_upload:
                     self.log.debug(f"Deleting file: {str(f)!r}")
                     f.unlink()
+                else:
+                    f.rename(self.trash_dir / f.name)
 
         for title, screenshot_list in clusters:
             start: datetime = screenshot_list[0][1]
@@ -147,9 +159,10 @@ class Uploader:
                 info = await self._new_session(title, start)
 
             last_timestamp = None
-            for chunk in chunk_list(screenshot_list, 8):
-                # TODO: Integrate cleanup into _upload main loop
+            files_to_drop = []
+            for chunk in chunk_list(screenshot_list, CONCURRENT_UPLOAD_WORKERS):
                 last_timestamp = chunk[-1][1]
+                files_to_drop.extend((p for p, _ in chunk))
                 await asyncio.gather(
                     *(
                         self._drive_upload_one(
@@ -160,27 +173,19 @@ class Uploader:
                 )
                 if self._stop_event.is_set():
                     await upload_postprocess(
-                        info.notion_page_id,
-                        last_timestamp,
+                        info.notion_page_id, last_timestamp, files_to_drop
                     )
                     return False
 
             assert last_timestamp is not None
-            await upload_postprocess(
-                info.notion_page_id,
-                last_timestamp,
-            )
+            await upload_postprocess(info.notion_page_id, last_timestamp, files_to_drop)
         return True
 
-    # upload process cannot be run in multiple directories at the same time
-    # because they both will race to delete files from it
-    async def upload(self, source_dir: str):
-        dirpath = Path(source_dir)
-        task = self._upload_task.get(dirpath)
-        if task is None:
-            task = asyncio.create_task(self._upload(dirpath))
-            task.add_done_callback(lambda _: self._upload_task.pop(dirpath, None))
-            task.add_done_callback(
+    # upload process cannot run in parallel because of race conditions during trashing
+    async def upload(self):
+        if not self._upload_task or self._upload_task.done():
+            self._upload_task = asyncio.create_task(self._upload())
+            self._upload_task.add_done_callback(
                 lambda t: (
                     self.log.exception(
                         "Uploader._upload() failed: ", exc_info=t.exception()
@@ -189,9 +194,9 @@ class Uploader:
                     else None
                 )
             )
-            self._upload_task[dirpath] = task
-        await task
-        # await self._upload(Path(source_dir))
+        await self._upload_task
+
+    # await self._upload(Path(source_dir))
 
     def stop(self):
         self._stop_event.set()
@@ -444,10 +449,12 @@ async def _main():
     uploader = Uploader(
         config.connection,
         config.notion_properties,
+        OBSERVATORY,
         config.session.minimum_session_gap_min,
         config.session.minimum_session_length_min,
         config.session.delete_after_upload,
     )
+
     try:
         async with asyncio.TaskGroup() as tg:
             while True:
@@ -459,7 +466,7 @@ async def _main():
                 if user_input == "q":
                     break
                 if user_input == "u":
-                    await tg.create_task(uploader.upload(OBSERVATORY))
+                    await tg.create_task(uploader.upload())
                 if user_input == "s":
                     uploader.stop()
     finally:
