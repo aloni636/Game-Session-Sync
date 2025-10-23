@@ -14,7 +14,7 @@ from ..types import Producer
 # TODO: Switch to DXcam and turbojpeg
 class PeriodicSampler(Producer):
     def __init__(
-        self, interval_sec: int, target_dir: str, title: str, tz: ZoneInfo | None
+        self, interval_sec: int, target_dir: str, title: str, tz: ZoneInfo
     ) -> None:
         self.interval_sec = interval_sec
         self.target_dir = Path(target_dir)
@@ -46,9 +46,11 @@ class PeriodicSampler(Producer):
 
 
 if __name__ == "__main__":
-    from datetime import datetime
+    import tzlocal
 
     from game_session_sync.test_helpers import producer_test_run
 
-    watcher = PeriodicSampler(15, "./images", "Deus Ex Mankind Divided", None)
+    watcher = PeriodicSampler(
+        3, "./images", "Deus Ex Mankind Divided", tzlocal.get_localzone()
+    )
     asyncio.run(producer_test_run(watcher))

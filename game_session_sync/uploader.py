@@ -41,6 +41,7 @@ class Uploader:
         notion_properties: NotionProperties,
         minimum_session_gap_min: int,
         minimum_session_length_min: int,
+        delete_after_upload: bool,
     ) -> None:
         self.notion_db_id = c_config.notion_database_id
         self.drive_root_id = c_config.drive_root_folder_id
@@ -48,6 +49,7 @@ class Uploader:
         self.notion_props = notion_properties
         self.minimum_session_gap_min = minimum_session_gap_min
         self.minimum_session_length_min = minimum_session_length_min
+        self.delete_after_upload = delete_after_upload
 
         self._notion = AsyncClient(auth=c_config.notion_api_token)
         gauth = GoogleAuth(c_config.drive_settings_file)
@@ -76,7 +78,6 @@ class Uploader:
         #   by looking in notion for sessions which are smaller than the specified threshold AND are not the first session.
         #   This will avoid deleting sessions which are in-fact just a game crash (for example).
         #   It is guaranteed in the uploader logic that there would be no 2 consecutive sessions of the same title which are closer than self.minimum_session_gap_min
-        #
 
         screenshots = [f for f in source_dir.iterdir() if f.is_file()]
         if not screenshots:
@@ -85,8 +86,14 @@ class Uploader:
         # extract timestamp, groupby title
         by_title: dict[str, list[_metadata]] = {}
         for path in screenshots:
-            title, timestamp, _ = parse_screenshot_filename(path.name, self.user_tz)
+            parsed_filename = parse_screenshot_filename(path.name, self.user_tz)
+            if not parsed_filename:
+                self.log.info(f"Invalid filename format: {str(path)!r}")
+                continue
+            title, timestamp = parsed_filename
             by_title.setdefault(title, []).append((path, timestamp))
+        if not by_title:
+            return True
 
         # sortby timestamp, split by consecutive timestamp diff
         def split_by_gap(input_list: list[_metadata]) -> list[list[_metadata]]:
@@ -112,6 +119,20 @@ class Uploader:
         # sortby cluster start
         clusters.sort(key=lambda v: v[1][0][1])
 
+        async def upload_postprocess(
+            page_id: str,
+            end: datetime,
+            files_to_delete: list[Path] | None = None,
+        ):
+            await self._update_notion_timestamp(
+                page_id,
+                end,
+            )
+            if self.delete_after_upload and files_to_delete:
+                for f in files_to_delete:
+                    self.log.debug(f"Deleting file: {str(f)!r}")
+                    f.unlink()
+
         for title, screenshot_list in clusters:
             start: datetime = screenshot_list[0][1]
             info = await self._last_session(title)
@@ -135,14 +156,14 @@ class Uploader:
                     )
                 )
                 if self._stop_event.is_set():
-                    await self._update_notion_timestamp(
+                    await upload_postprocess(
                         info.notion_page_id,
                         last_timestamp,
                     )
                     return False
 
             assert last_timestamp is not None
-            await self._update_notion_timestamp(
+            await upload_postprocess(
                 info.notion_page_id,
                 last_timestamp,
             )
@@ -156,8 +177,18 @@ class Uploader:
         if task is None:
             task = asyncio.create_task(self._upload(dirpath))
             task.add_done_callback(lambda _: self._upload_task.pop(dirpath, None))
+            task.add_done_callback(
+                lambda t: (
+                    self.log.exception(
+                        "Uploader._upload() failed: ", exc_info=t.exception()
+                    )
+                    if t.exception()
+                    else None
+                )
+            )
             self._upload_task[dirpath] = task
         await task
+        # await self._upload(Path(source_dir))
 
     def stop(self):
         self._stop_event.set()
@@ -302,8 +333,6 @@ class Uploader:
         self.log.debug(
             f"Uploaded to drive: {path} -> {drive_folder_id!r}/{drive_file_name!r}"
         )
-        self.log.debug(f"Deleting file: {path!r}")
-        Path(path).unlink()
         return file
 
     def _notion_local_iso(self, dt: datetime) -> str:
@@ -416,17 +445,20 @@ async def _main():
         config.notion_properties,
         config.session.minimum_session_gap_min,
         config.session.minimum_session_length_min,
+        config.session.delete_after_upload,
     )
     try:
         async with asyncio.TaskGroup() as tg:
             while True:
                 user_input = (
-                    await asyncio.to_thread(input, "[q: quit | u: upload | s: stop upload] > ")
+                    await asyncio.to_thread(
+                        input, "[q: quit | u: upload | s: stop upload] > "
+                    )
                 ).strip()
                 if user_input == "q":
                     break
                 if user_input == "u":
-                    tg.create_task(uploader.upload(OBSERVATORY))
+                    await tg.create_task(uploader.upload(OBSERVATORY))
                 if user_input == "s":
                     uploader.stop()
     finally:

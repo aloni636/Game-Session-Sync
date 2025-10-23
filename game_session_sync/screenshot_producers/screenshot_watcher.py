@@ -18,7 +18,7 @@ def resolve_path(path: str | Path) -> str:
 
 
 class _FileWatcherHandler(FileSystemEventHandler):
-    def __init__(self, target_dir: str, title: str, tz: ZoneInfo | None) -> None:
+    def __init__(self, target_dir: str, title: str, tz: ZoneInfo) -> None:
         super().__init__()
         self.target_dir: Path = Path(target_dir)
         self.title = title
@@ -48,7 +48,7 @@ class _FileWatcherHandler(FileSystemEventHandler):
 
 class ScreenshotWatcher(Producer):
     def __init__(
-        self, source_dir: str, target_dir: str, title: str, tz: ZoneInfo | None
+        self, source_dir: str, target_dir: str, title: str, tz: ZoneInfo
     ) -> None:
         self.source_dir = resolve_path(source_dir)
         self.target_dir = resolve_path(target_dir)
@@ -71,12 +71,14 @@ class ScreenshotWatcher(Producer):
 
 
 if __name__ == "__main__":
+    import tzlocal
+
     from game_session_sync.test_helpers import producer_test_run
 
     watcher = ScreenshotWatcher(
         r"~\Pictures\Screenshots",
         "./images",
         "Deus Ex Mankind Divided",
-        None,
+        tzlocal.get_localzone(),
     )
     asyncio.run(producer_test_run(watcher))

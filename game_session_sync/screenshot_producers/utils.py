@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 
 def screenshot_filename(
-    title: str, suffix: str, zoneinfo: ZoneInfo | None, manual: bool = False
+    title: str, suffix: str, zoneinfo: ZoneInfo, manual: bool = False
 ):
     timestamp = datetime.now(zoneinfo)
     timestamp_str = timestamp.strftime("%Y.%m.%d %H.%M.%S.%f")[
@@ -17,23 +17,22 @@ def screenshot_filename(
 
 
 def parse_screenshot_filename(
-    filename: str, zoneinfo: ZoneInfo | None
-) -> tuple[str, datetime, bool]:
+    filename: str, zoneinfo: ZoneInfo
+) -> tuple[str, datetime] | None:
     matches = re.match(
         r"^(.+?) (\d{4}\.\d{2}\.\d{2} \d{2}\.\d{2}\.\d{2}\.\d{3}) ([+-]\d{4}) (manual|auto)(.+)$",
         filename,
     )
     if not matches:
-        raise ValueError(f"Invalid filename format: {filename}")
+        return None
 
-    title, timestamp_str, offset, manual_flag, _ = matches.groups()
+    title, timestamp_str, offset, manual_flag, suffix = matches.groups()
 
     timestamp_str = timestamp_str + "000"
     timestamp = datetime.strptime(
         f"{timestamp_str} {offset}", "%Y.%m.%d %H.%M.%S.%f %z"
     ).astimezone(zoneinfo)
-    manual = manual_flag == "manual"
-    return title, timestamp, manual
+    return title, timestamp
 
 
 # def session_dirname(title: str, start: datetime, end: datetime | None = None):

@@ -27,8 +27,7 @@ class SessionConfig:
     minimum_session_gap_min: int
     minimum_session_length_min: int
     phash_threshold: int
-    # minimum_session_length_min: int
-
+    delete_after_upload: bool
 
 @dataclass(frozen=True)
 class NotionProperties:
