@@ -261,6 +261,7 @@ class Uploader:
             title,
             start,
             start,
+            self._get_drive_folder_link(session_folder),
             self._get_drive_embed_link(session_folder),
         )
         return _SessionInfo(start, session_folder["id"], notion_page["id"])
@@ -353,6 +354,7 @@ class Uploader:
         title: str,
         start: datetime,
         end: datetime,
+        drive_link: str,
         embed_link: str,
     ) -> dict[str, Any]:
 
@@ -372,7 +374,7 @@ class Uploader:
                     "end": None,
                 }
             },
-            self.notion_props.drive_link: {"url": embed_link},
+            self.notion_props.drive_link: {"url": drive_link},
         }
         # query for an existing page matching the immutable title/start combo
         q: dict[str, Any] = await asyncio.wait_for(
