@@ -122,7 +122,7 @@ class InputIdleWatcher:
                     dx, dy = ri.mouse.lLastX, ri.mouse.lLastY
                     bf = ri.mouse.s.usButtonFlags
                     if dx or dy or bf:
-                        self.log.debug(f"MOUSE dx={dx} dy={dy} buttons=0x{bf:04x}")
+                        # self.log.debug(f"MOUSE dx={dx} dy={dy} buttons=0x{bf:04x}")
                         asyncio.run_coroutine_threadsafe(
                             self._handle_raw_input(), self.loop
                         )
@@ -132,7 +132,7 @@ class InputIdleWatcher:
                         win32con.WM_KEYDOWN,
                         win32con.WM_SYSKEYDOWN,
                     ):
-                        self.log.debug(f"KEY vkey={ri.keyboard.VKey}")
+                        # self.log.debug(f"KEY vkey={ri.keyboard.VKey}")
                         asyncio.run_coroutine_threadsafe(
                             self._handle_raw_input(), self.loop
                         )

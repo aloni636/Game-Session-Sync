@@ -17,9 +17,8 @@ async def main():
     app = GameSessionSync(config)
     try:
         await app.run()
-    except* Exception as eg:
-        log.exception("Exception raised to top of the stack and crashed the software")
-        raise
+    except* KeyboardInterrupt:
+        log.exception("Graceful exit by keyboard interrupt")
     finally:
         await app.stop()
 

@@ -23,7 +23,7 @@ class Producer(ABC):
 
         @wraps(original_run)
         async def _wrapped_run(self):
-            self.log.debug("received run signal")
+            self.log.info("Received run signal")
             self._stop_event.clear()
             return await original_run(self)
 
@@ -37,7 +37,7 @@ class Producer(ABC):
             def wrapped_init(self, *args, **kwargs):
                 Producer.__init__(self)
                 original_init(self, *args, **kwargs)
-                self.log.debug(f"fully initialized")
+                self.log.info(f"Fully initialized")
 
             cls.__init__ = wrapped_init
 
@@ -47,7 +47,7 @@ class Producer(ABC):
 
     @final
     def stop(self):
-        self.log.debug(f"received stop signal")
+        self.log.info(f"Received stop signal")
         self._stop_event.set()
 
 

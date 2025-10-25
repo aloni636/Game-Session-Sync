@@ -1,11 +1,15 @@
 import asyncio
+import http.client
 import logging
+import socket
+import ssl
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator, Sequence, TypeAlias, TypeVar
 from zoneinfo import ZoneInfo
 
+import backoff
 from notion_client import AsyncClient
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive, GoogleDriveFile
@@ -194,10 +198,10 @@ class Uploader:
             )
         await self._upload_task
 
-    # await self._upload(Path(source_dir))
-
-    def stop(self):
+    async def stop(self):
         self._stop_event.set()
+        if self._upload_task:
+            await self._upload_task
 
     async def _last_session(self, title: str) -> _SessionInfo | None:
         try:
@@ -323,6 +327,21 @@ class Uploader:
         self, drive_folder_id: str, path: str, drive_file_name: str
     ) -> GoogleDriveFile:
         # TODO: Use aiogoogle for true async work
+        @backoff.on_exception(
+            backoff.expo,
+            (
+                ssl.SSLEOFError,
+                ssl.SSLError,
+                http.client.IncompleteRead,
+                ConnectionResetError,
+                socket.timeout,
+                TimeoutError,
+            ),
+            max_tries=4,
+            max_time=30,
+            jitter=backoff.full_jitter,
+            logger=self.log,
+        )
         def f():
             file = self._drive.CreateFile(
                 {"title": drive_file_name, "parents": [{"id": drive_folder_id}]}
@@ -439,6 +458,7 @@ class Uploader:
 async def _main():
     from .config import load_config
     from .log_helpers import Console, setup_test_logging
+
     OBSERVATORY = Path("./observatory")
     console = Console()
     setup_test_logging(console)
@@ -467,9 +487,9 @@ async def _main():
                     # await to pull exceptions from task into current coroutine
                     await tg.create_task(uploader.upload())
                 if user_input == "s":
-                    uploader.stop()
+                    await uploader.stop()
     finally:
-        uploader.stop()
+        await uploader.stop()
         console.kill()
 
 

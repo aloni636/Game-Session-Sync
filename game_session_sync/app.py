@@ -38,7 +38,7 @@ class GameSessionSync:
         self.log = logging.getLogger(self.__class__.__name__)
 
     async def _start_session(self, title: str):
-        self.uploader.stop()
+        await self.uploader.stop()
 
         if self.active_session is None:
             self.active_session = Session(title, self.s_config, self.tz)
