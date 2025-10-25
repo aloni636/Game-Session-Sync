@@ -15,7 +15,6 @@ class BaseWindowEvent:
 
 @dataclass(slots=True)
 class BaseInputEvent:
-    idle_seconds: float
     timestamp: datetime = _now_field
 
 

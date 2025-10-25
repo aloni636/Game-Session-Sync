@@ -71,6 +71,7 @@ class Uploader:
         self._upload_task: asyncio.Task | None = None
         self.log = logging.getLogger(self.__class__.__name__)
 
+    # TODO: add exponential jittered retries
     async def _upload(self) -> bool:
         self._stop_event.clear()
         # TODO: Use session_dirname to track session time-bounds by exact process lifetime

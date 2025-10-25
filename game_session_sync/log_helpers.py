@@ -36,7 +36,7 @@ def setup_logging():
     root.addHandler(file)
 
 
-def setup_test_logging(user_console: Console):
+def setup_test_logging(user_console: Console, level=logging.DEBUG):
     # Time only formatter
     fmt = logging.Formatter(
         fmt="%(asctime)s.%(msecs)03d | %(levelname)s | %(name)s | %(funcName)s | %(message)s",
@@ -44,10 +44,10 @@ def setup_test_logging(user_console: Console):
     )
     # Reroute log stream to terminal
     console = logging.StreamHandler(user_console.stdin)
-    console.setLevel(logging.DEBUG)
+    console.setLevel(level)
     console.setFormatter(fmt)
 
     # Root logger
     root = logging.getLogger()
-    root.setLevel(logging.DEBUG)
+    root.setLevel(level)
     root.addHandler(console)

@@ -21,7 +21,7 @@ async def main():
         log.exception("Exception raised to top of the stack and crashed the software")
         raise
     finally:
-        app.stop()
+        await app.stop()
 
 
 if __name__ == "__main__":

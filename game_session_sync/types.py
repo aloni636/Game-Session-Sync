@@ -60,14 +60,14 @@ class LoggingQueue(asyncio.Queue[T], Generic[T]):
         self._log = logging.getLogger(self.__class__.__name__)
 
     async def put(self, item: T) -> None:
-        self._log.debug(f"Putting: {item!r}")
+        self._log.info(f"Putting: {item!r}")
         return await super().put(item)
 
     def put_nowait(self, item: T) -> None:
-        self._log.debug(f"Putting: {item!r}")
+        self._log.info(f"Putting: {item!r}")
         return super().put_nowait(item)
 
     async def get(self) -> T:
         item = await super().get()
-        self._log.debug(f"Getting: {item!r}")
+        self._log.info(f"Getting: {item!r}")
         return item

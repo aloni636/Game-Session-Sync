@@ -18,7 +18,6 @@ class GameSessionSync:
         )
         self.input_idle_watcher = InputIdleWatcher(
             self.queue,
-            config.monitor.polling_interval_ms,
             config.monitor.input_idle_sec,
         )
 
@@ -113,10 +112,10 @@ class GameSessionSync:
             tg.create_task(self.input_idle_watcher.run())
             tg.create_task(self._run())
 
-    def stop(self):
+    async def stop(self):
         self.log.info(
             f"Stopping; active_session={getattr(self.active_session, "title", None)}; last_event={self.last_event}"
         )
         self._stop_event.set()
         self.window_watcher.stop()
-        self.input_idle_watcher.stop()
+        await self.input_idle_watcher.stop()
