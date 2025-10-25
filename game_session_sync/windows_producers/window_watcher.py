@@ -324,11 +324,12 @@ class WindowEventWatcher:
 
     async def run(self):
         self.loop = asyncio.get_running_loop()
-        await asyncio.to_thread(self._thread_run)
+        self._thread_task = asyncio.create_task(asyncio.to_thread(self._thread_run))
 
-    def stop(self):
+    async def stop(self):
         self._thread_stop_event.set()
         self._process_exit_watcher.clear_all()
+        await self._thread_task
 
 
 # poetry run python -m game_session_sync.windows_producers.window_watcher
@@ -348,7 +349,7 @@ async def _main():
             if user_input == "q":
                 break
     finally:
-        watcher.stop()
+        await watcher.stop()
         console.kill()
 
 

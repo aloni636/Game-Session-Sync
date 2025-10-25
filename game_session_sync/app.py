@@ -117,5 +117,5 @@ class GameSessionSync:
             f"Stopping; active_session={getattr(self.active_session, "title", None)}; last_event={self.last_event}"
         )
         self._stop_event.set()
-        self.window_watcher.stop()
+        await self.window_watcher.stop()
         await self.input_idle_watcher.stop()
