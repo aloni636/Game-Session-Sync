@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 import mss
 import mss.tools
 
-from game_session_sync.screenshot_producers.utils import screenshot_filename
+from ..naming_utils import screenshot_filename
 from ..types import Producer
 
 
@@ -45,8 +45,9 @@ class PeriodicSampler(Producer):
 
 
 if __name__ == "__main__":
-    import tzlocal
     from pathlib import Path
+
+    import tzlocal
 
     from game_session_sync.test_helpers import producer_test_run
 

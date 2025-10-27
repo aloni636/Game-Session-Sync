@@ -15,7 +15,7 @@ from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive, GoogleDriveFile
 
 from game_session_sync.config import ConnectionConfig, NotionProperties
-from game_session_sync.screenshot_producers.utils import (
+from game_session_sync.naming_utils import (
     build_session_name,
     parse_screenshot_filename,
 )

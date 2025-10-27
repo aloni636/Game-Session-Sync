@@ -6,9 +6,15 @@ import dacite
 import yaml
 
 from .log_helpers import dataclass_format
-from .path_utils import resolve_path
 
-logger = logging.getLogger()
+log = logging.getLogger()
+
+
+def _resolve_path(
+    path: str | Path,
+) -> Path:
+    """Resolve a path into an absolute Path."""
+    return Path(path).expanduser().resolve(strict=True)
 
 
 @dataclass(frozen=True)
@@ -44,7 +50,6 @@ class NotionProperties:
 class MonitorConfig:
     game_process_regex_pattern: list[str]
     input_idle_sec: int
-    polling_interval_ms: int
 
 
 @dataclass(frozen=True)
@@ -56,17 +61,17 @@ class Config:
 
 
 def load_config(path: Path) -> Config:
-    config_path = resolve_path(path)
+    config_path = _resolve_path(path)
     yaml_dict = yaml.safe_load(config_path.read_text())
     config = dacite.from_dict(
         Config,
         yaml_dict,
         dacite.Config(
             strict=True,
-            type_hooks={Path: resolve_path},
+            type_hooks={Path: _resolve_path},
         ),
     )
 
-    logger.info(f"Loaded config from {str(config_path)!r}")
-    logger.debug(f"Parsed config:\n{dataclass_format(config)}")
+    log.info(f"Loaded config from {str(config_path)!r}")
+    log.debug(f"Parsed config:\n{dataclass_format(config)}")
     return config
