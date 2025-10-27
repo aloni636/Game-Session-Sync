@@ -18,9 +18,4 @@ A Windows scheduled task which monitors screenshots & screen recordings, aggrega
 - Internal processing datetime timezone format is **UTC**.
 - One client is allowed at the time, because it is a personal tracker.
 - The Notion DB is used for state management. On Notion write failure files will be **re-scanned** with Google Drive, **but not reuploaded**.
-- Batch ETL is used uploading. **Stream based processing** coupled with USN Journal queries and full re-scans fallbacks was considered but a continuous watchdog process for a sparse producer (*me*) with latency tolerances of 1+ hours is **unnecessary**.
-
-## TODOs
-- [X] Handle Notion side upsert for sessions in progress.
-    - Sessions on average are more than 1 hour, so **upserting** every 1 hour will populate an entry fresh to be edited **before the session ends**.
-- [ ] Use `watchdog` and periodic validation for a more robust sync guarantees.
+- ~~Batch ETL is used uploading. **Stream based processing** coupled with USN Journal queries and full re-scans fallbacks was considered but a continuous watchdog process for a sparse producer (*me*) with latency tolerances of 1+ hours is **unnecessary**.~~
