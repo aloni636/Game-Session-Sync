@@ -6,7 +6,7 @@ import ssl
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator, Sequence, TypeAlias, TypeVar
+from typing import Any, Iterator, TypeAlias, TypeVar
 from zoneinfo import ZoneInfo
 
 import backoff
@@ -15,14 +15,12 @@ from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive, GoogleDriveFile
 
 from game_session_sync.config import ConnectionConfig, NotionProperties
-from game_session_sync.naming_utils import (
-    build_session_name,
-    parse_screenshot_filename,
-)
+from game_session_sync.naming_utils import build_session_name, parse_screenshot_filename
+from game_session_sync.notifier_utils import ProgressNotifier
 
-IO_TIMEOUT_SEC = 10
+IO_TIMEOUT_SEC = 30
 TRASH_DIRNAME = ".trash"
-CONCURRENT_UPLOAD_WORKERS = 8
+CONCURRENT_UPLOAD_WORKERS = 6
 
 _metadata: TypeAlias = tuple[Path, datetime]
 T = TypeVar("T")
@@ -75,7 +73,6 @@ class Uploader:
         self._upload_task: asyncio.Task | None = None
         self.log = logging.getLogger(self.__class__.__name__)
 
-    # TODO: add exponential jittered retries
     async def _upload(self) -> bool:
         self._stop_event.clear()
         # TODO: Use session_dirname to track session time-bounds by exact process lifetime
@@ -150,6 +147,7 @@ class Uploader:
                 else:
                     f.rename(self.trash_dir / f.name)
 
+        progress = ProgressNotifier(clusters)
         for title, screenshot_list in clusters:
             start: datetime = screenshot_list[0][1]
             info = await self._last_session(title)
@@ -162,9 +160,8 @@ class Uploader:
 
             last_timestamp = None
             files_to_drop = []
+            # notify: update status (Uploading...) ValueStringOverride: 15/25/96 Captures
             for chunk in chunk_list(screenshot_list, CONCURRENT_UPLOAD_WORKERS):
-                last_timestamp = chunk[-1][1]
-                files_to_drop.extend((p for p, _ in chunk))
                 await asyncio.gather(
                     *(
                         self._drive_upload_one(
@@ -173,6 +170,9 @@ class Uploader:
                         for path, _ in chunk
                     )
                 )
+                progress.increment_files(len(chunk))
+                last_timestamp = chunk[-1][1]
+                files_to_drop.extend((p for p, _ in chunk))
                 if self._stop_event.is_set():
                     await upload_postprocess(
                         info.notion_page_id, last_timestamp, files_to_drop
@@ -181,6 +181,8 @@ class Uploader:
 
             assert last_timestamp is not None
             await upload_postprocess(info.notion_page_id, last_timestamp, files_to_drop)
+            progress.increment_session()
+        progress.finish()
         return True
 
     # upload process cannot run in parallel because of race conditions during trashing

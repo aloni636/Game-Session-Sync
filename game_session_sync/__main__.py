@@ -6,6 +6,7 @@ from pathlib import Path
 from .app import GameSessionSync
 from .config import load_config
 from .log_helpers import setup_logging
+from .notifier_utils import notify_error
 
 log = logging.getLogger()
 
@@ -17,8 +18,10 @@ async def main():
     app = GameSessionSync(config)
     try:
         await app.run()
-    except* KeyboardInterrupt:
+    except KeyboardInterrupt:
         log.exception("Graceful exit by keyboard interrupt")
+    except Exception as e:
+        notify_error(e)
     finally:
         await app.stop()
 

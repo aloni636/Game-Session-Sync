@@ -10,7 +10,8 @@
             "request": "launch",
             // Build module name from the file's relative dir + basename 
             // by replacing path separators with dots
-            "module": "${command:extension.commandvariable.file.relativeFileDotsNoExtension}"
+            "module": "${command:extension.commandvariable.file.relativeFileDotsNoExtension}",
+            "justMyCode": false
         },
         {
             "name": "Python: game_session_sync",

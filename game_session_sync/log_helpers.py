@@ -5,6 +5,7 @@ from pprint import pformat
 
 # TODO: Isolate experiments by reimplementing Console here
 from experiments.console import Console
+from game_session_sync.constants import LOG_PATH
 
 
 def dataclass_format(dataclass) -> str:
@@ -24,7 +25,7 @@ def setup_logging():
 
     # File handler (info level, rotation)
     file = RotatingFileHandler(
-        "app.log", maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
+        LOG_PATH, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
     )
     file.setLevel(logging.INFO)
     file.setFormatter(fmt)
