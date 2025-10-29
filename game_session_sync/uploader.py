@@ -38,7 +38,6 @@ class _SessionInfo:
     notion_page_id: str
 
 
-# TODO: Convert drive object from pydrive2 to aiogoogle
 class Uploader:
     def __init__(
         self,
@@ -54,7 +53,7 @@ class Uploader:
         self.user_tz = ZoneInfo(c_config.notion_user_tz)
         self.notion_props = notion_properties
         self.minimum_session_gap_min = minimum_session_gap_min
-        # TODO: integrate minimum length cleanup into session upload
+        # TODO: use minimum length to cleanup old sessions during upload
         self.minimum_session_length_min = minimum_session_length_min
         self.delete_after_upload = delete_after_upload
 
@@ -162,6 +161,7 @@ class Uploader:
             files_to_drop = []
             # notify: update status (Uploading...) ValueStringOverride: 15/25/96 Captures
             for chunk in chunk_list(screenshot_list, CONCURRENT_UPLOAD_WORKERS):
+                # TODO: use phash to drop near identical screenshots
                 await asyncio.gather(
                     *(
                         self._drive_upload_one(
