@@ -6,7 +6,7 @@ from pathlib import Path
 from .app import GameSessionSync
 from .config import load_config
 from .log_helpers import setup_logging
-from .notifier_utils import notify_error
+from .notifier_utils import notify_error, notify_init
 
 log = logging.getLogger()
 
@@ -16,6 +16,7 @@ async def main():
     config_path = os.environ.get("CONFIG_YAML", "config.yaml")
     config = load_config(Path(config_path))
     app = GameSessionSync(config)
+    notify_init()
     try:
         await app.run()
     except KeyboardInterrupt:

@@ -22,6 +22,12 @@ def notify_error(e: Exception):
     )
 
 
+def notify_init():
+    notify(
+        f"{APP_NAME}: Application Is Running",
+    )
+
+
 class ProgressNotifier:
     def __init__(self, clusters: list[tuple[str, list[tuple[Path, datetime]]]]) -> None:
         self._num_sessions: int = len(clusters)
