@@ -20,7 +20,7 @@ def _resolve_path(
 @dataclass(frozen=True)
 class ConnectionConfig:
     notion_api_token: str
-    notion_database_id: str
+    notion_datasource_id: str
     drive_root_folder_id: str
     drive_settings_file: Path
     notion_user_tz: str

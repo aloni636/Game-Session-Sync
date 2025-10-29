@@ -48,7 +48,7 @@ class Uploader:
         minimum_session_length_min: int,
         delete_after_upload: bool,
     ) -> None:
-        self.notion_db_id = c_config.notion_database_id
+        self.notion_ds_id = c_config.notion_datasource_id
         self.drive_root_id = c_config.drive_root_folder_id
         self.user_tz = ZoneInfo(c_config.notion_user_tz)
         self.notion_props = notion_properties
@@ -208,8 +208,8 @@ class Uploader:
     async def _last_session(self, title: str) -> _SessionInfo | None:
         try:
             q: dict[str, Any] = await asyncio.wait_for(
-                self._notion.databases.query(
-                    database_id=self.notion_db_id,
+                self._notion.data_sources.query(
+                    data_source_id=self.notion_ds_id,
                     filter={
                         "property": self.notion_props.title,
                         # https://developers.notion.com/reference/post-database-query-filter#select
@@ -403,8 +403,8 @@ class Uploader:
         }
         # query for an existing page matching the immutable title/start combo
         q: dict[str, Any] = await asyncio.wait_for(
-            self._notion.databases.query(
-                database_id=self.notion_db_id,
+            self._notion.data_sources.query(
+                data_source_id=self.notion_ds_id,
                 filter={
                     "and": [
                         {
@@ -431,10 +431,10 @@ class Uploader:
         # insert branch
         else:
             self.log.info(
-                f"Creating Notion page for session {name} in database {self.notion_db_id}"
+                f"Creating Notion page for session {name} in database {self.notion_ds_id}"
             )
             page = await self._notion.pages.create(
-                parent={"database_id": self.notion_db_id},
+                parent={"data_source_id": self.notion_ds_id},
                 properties=props,
             )
 
