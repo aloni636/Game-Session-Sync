@@ -1,6 +1,6 @@
 # --- configurations ---
 $ADDITIONAL_FILES = @(
-  '.env',
+  "config.yaml"
   'client_secrets.json',
   'credentials.json',
   'settings.yaml'
