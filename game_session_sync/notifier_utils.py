@@ -16,13 +16,9 @@ def _plural(sequence, name: str):
 
 def notify_error(e: Exception):
     notify(
-        f"{APP_NAME}: Error",
-        f"{type(e).__name__}: {str(e)}",
-        button={
-            "activationType": "protocol",
-            "arguments": str("vscode://file/" / Path(LOG_PATH).expanduser().absolute()),
-            "content": "Open logs in VSCode",
-        },
+        f"{APP_NAME}: {type(e).__name__}",
+        f"Open logs in VSCode",
+        on_click=f"vscode://file/{Path(LOG_PATH).expanduser().absolute().as_posix()}",
     )
 
 
