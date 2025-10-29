@@ -94,6 +94,8 @@ class InputIdleWatcher:
     def __init__(self, queue: EventBus, max_idle_seconds: float) -> None:
         self.queue = queue
         self.max_idle_seconds = max_idle_seconds
+        self._thread_task: asyncio.Task | None = None
+        self._hwnd: int | None = None
         self.log = logging.getLogger(self.__class__.__name__)
 
     def wndproc(self, hwnd, msg, wparam, lparam):
@@ -191,8 +193,10 @@ class InputIdleWatcher:
         self._thread_task = asyncio.create_task(asyncio.to_thread(self._thread_run))
 
     async def stop(self) -> None:
-        win32api.PostMessage(self._hwnd, win32con.WM_CLOSE, 0, 0)
-        await self._thread_task
+        if self._hwnd is not None:
+            win32api.PostMessage(self._hwnd, win32con.WM_CLOSE, 0, 0)
+        if self._thread_task:
+            await self._thread_task
 
 
 async def _main():

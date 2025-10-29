@@ -222,6 +222,7 @@ class WindowEventWatcher:
 
         self._process_exit_watcher = _ProcessExitWatcher(queue, self.exe_patterns)
         self._last_foreground_title = None
+        self._thread_task: asyncio.Task | None = None
         self._thread_stop_event = threading.Event()
         self.log = logging.getLogger(self.__class__.__name__)
 
@@ -329,7 +330,8 @@ class WindowEventWatcher:
     async def stop(self):
         self._thread_stop_event.set()
         self._process_exit_watcher.clear_all()
-        await self._thread_task
+        if self._thread_task:
+            await self._thread_task
 
 
 # poetry run python -m game_session_sync.windows_producers.window_watcher

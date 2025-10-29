@@ -100,7 +100,6 @@ class GameSessionSync:
                 elif isinstance(event, GameCloseEvent):
                     tg.create_task(self._stop_session(event))
 
-                self.last_event = event
                 self.queue.task_done()
 
             self._cleanup_session()
@@ -114,7 +113,7 @@ class GameSessionSync:
 
     async def stop(self):
         self.log.info(
-            f"Stopping; active_session={getattr(self.active_session, "title", None)}; last_event={self.last_event}"
+            f"Stopping; active_session={getattr(self.active_session, "title", None)}"
         )
         self._stop_event.set()
         await self.window_watcher.stop()
