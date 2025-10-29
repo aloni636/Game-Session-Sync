@@ -36,34 +36,48 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 
 
 # --- build into isolated venv ---
+Write-Host "Starting build with poetry..."
 poetry build
+$buildExit = $LASTEXITCODE
+if ($buildExit -ne 0) { throw "poetry build failed with exit code $buildExit" }
+Write-Host "Build complete. Locating latest wheel..."
 $wheel = Get-ChildItem dist\*.whl | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $wheel) {
   throw "No wheel found under dist\*.whl. Did 'poetry build' succeed?"
 }
 
-New-Item -Type Directory $DEPLOYMENT_DIR -ErrorAction SilentlyContinue
+Write-Host "Preparing deployment directory at '$DEPLOYMENT_DIR'..."
+New-Item -Type Directory $DEPLOYMENT_DIR -ErrorAction SilentlyContinue | Out-Null
 Get-ChildItem $DEPLOYMENT_DIR | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+Write-Host "Copying additional files: $($ADDITIONAL_FILES -join ', ')"
 
 foreach ($f in $ADDITIONAL_FILES) {
   Copy-Item $f $DEPLOYMENT_DIR
 }
+Write-Host "Creating production virtual environment..."
 python -m venv .\deployment\.venv-prod
+Write-Host "Installing wheel '$($wheel.Name)' into venv..."
 & (Join-Path $DEPLOYMENT_DIR "\.venv-prod\Scripts\python.exe") -m pip install $wheel.FullName
+if ($LASTEXITCODE -ne 0) { throw "pip install failed with exit code $LASTEXITCODE" }
+Write-Host "Dependencies installed. Configuring scheduled task..."
 
 
 # --- paths ---
 $wd = (Resolve-Path $DEPLOYMENT_DIR).Path
 $pythonw = (Resolve-Path .\deployment\.venv-prod\Scripts\pythonw.exe).Path
+Write-Host "Using working directory: '$wd'"
+Write-Host "Using pythonw: '$pythonw'"
 $Action = New-ScheduledTaskAction -Execute $pythonw -Argument ('-m game_session_sync') -WorkingDirectory $wd
 
 
 # --- triggers ---
+Write-Host "Creating scheduled task triggers (AtStartup, AtLogOn)..."
 $TriggerStartup = New-ScheduledTaskTrigger -AtStartup
 $TriggerLogon = New-ScheduledTaskTrigger -AtLogOn
 
 
 # --- principal ---
+Write-Host "Configuring principal for user '$env:USERDOMAIN\$env:USERNAME'..."
 $Principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive
 
 
@@ -79,14 +93,17 @@ $Settings = New-ScheduledTaskSettingsSet `
 
 
 # --- register ---
+Write-Host "Registering scheduled task '$TASK_NAME'..."
 Register-ScheduledTask -TaskName $TASK_NAME -Action $Action `
   -Trigger @($TriggerStartup, $TriggerLogon) `
   -Principal $Principal -Settings $Settings `
   -Description "Run Game Session Sync (always-on monitor)" -Force
 
 # restart the task to apply updates now
+Write-Host "Restarting scheduled task to apply updates..."
 Stop-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue
 Start-ScheduledTask -TaskName $TASK_NAME
+Write-Host "Scheduled task '$TASK_NAME' restarted."
 
 Write-Host @"
 
