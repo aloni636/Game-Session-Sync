@@ -15,7 +15,11 @@ from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive, GoogleDriveFile
 
 from game_session_sync.config import ConnectionConfig, NotionProperties
-from game_session_sync.naming_utils import build_session_name, parse_screenshot_filename
+from game_session_sync.naming_utils import (
+    build_session_name,
+    parse_screenshot_filename,
+    parse_session_name,
+)
 from game_session_sync.notifier_utils import ProgressNotifier
 
 IO_TIMEOUT_SEC = 30
@@ -33,9 +37,11 @@ def chunk_list(lst: list[T], n: int) -> Iterator[list[T]]:
 
 @dataclass
 class _SessionInfo:
-    last_end: datetime
+    start: datetime
+    end: datetime
     drive_folder_id: str
     notion_page_id: str
+    page_name: str
 
 
 class Uploader:
@@ -53,7 +59,6 @@ class Uploader:
         self.user_tz = ZoneInfo(c_config.notion_user_tz)
         self.notion_props = notion_properties
         self.minimum_session_gap_min = minimum_session_gap_min
-        # TODO: use minimum length to cleanup old sessions during upload
         self.minimum_session_length_min = minimum_session_length_min
         self.delete_after_upload = delete_after_upload
 
@@ -151,8 +156,18 @@ class Uploader:
             start: datetime = screenshot_list[0][1]
             info = await self._last_session(title)
             if (
-                info is None  # new session
-                or (start - info.last_end).total_seconds() / 60
+                info is not None  # exists
+                and (info.end - info.start).total_seconds() / 60
+                < self.minimum_session_length_min  # too short
+                and parse_session_name(info.page_name, self.user_tz)
+                is not None  # user haven't modified page name yet
+            ):
+                await self._drop_session(info)
+                info = await self._new_session(title, start)
+
+            if (
+                info is None  # first time playing a new title
+                or (start - info.end).total_seconds() / 60
                 > self.minimum_session_gap_min  # gap too big
             ):
                 info = await self._new_session(title, start)
@@ -244,10 +259,16 @@ class Uploader:
                 session_folder = await self._new_drive_dir(
                     session_name, self.drive_root_id
                 )
+                # name, like any rich text property, is a list of text objects supporting bold, italic, hyperlinks etc
+                title_prop = props[self.notion_props.name]["title"]
+                page_name = "".join(fragment["plain_text"] for fragment in title_prop)
+
                 return _SessionInfo(
+                    last_start,
                     last_end,
                     session_folder["id"],
                     notion_page["id"],
+                    page_name,
                 )
 
             else:
@@ -273,7 +294,18 @@ class Uploader:
             self._get_drive_folder_link(session_folder),
             self._get_drive_embed_link(session_folder),
         )
-        return _SessionInfo(start, session_folder["id"], notion_page["id"])
+        return _SessionInfo(
+            start,
+            start,
+            session_folder["id"],
+            notion_page["id"],
+            session_name,
+        )
+
+    async def _drop_session(self, info: _SessionInfo):
+        self.log.info(f"Dropping session {info.page_name!r}")
+        await self._drop_drive_dir(info.drive_folder_id)
+        await self._drop_notion_page(info.notion_page_id)
 
     # --- Drive helpers ---
     @staticmethod
@@ -324,6 +356,21 @@ class Uploader:
                 f"Reusing Drive folder {name} ({file['id']}) with parent {parent_id}"
             )
         return file
+
+    async def _drop_drive_dir(self, drive_folder_id: str):
+        def f() -> None:
+            folder = self._drive.CreateFile({"id": drive_folder_id})
+            folder.Delete()
+
+        await asyncio.wait_for(asyncio.to_thread(f), IO_TIMEOUT_SEC)
+        self.log.info(f"Deleted Drive folder {drive_folder_id!r}")
+
+    async def _drop_notion_page(self, notion_page_id: str):
+        await asyncio.wait_for(
+            self._notion.pages.update(notion_page_id, archived=True),
+            IO_TIMEOUT_SEC,
+        )
+        self.log.info(f"Archived Notion page {notion_page_id!r}")
 
     async def _drive_upload_one(
         self, drive_folder_id: str, path: str, drive_file_name: str
