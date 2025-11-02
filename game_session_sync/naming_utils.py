@@ -43,10 +43,16 @@ def build_session_name(title: str, start: datetime, zoneinfo: ZoneInfo) -> str:
     return f"{title} {start.astimezone(zoneinfo).strftime('%Y-%m-%d %H_%M')}"
 
 
-# def session_dirname(title: str, start: datetime, end: datetime | None = None):
-#     start_str = start.strftime("%Y.%m.%d - %H.%M.%S")
-#     end_str = ""
-#     if end is not None:
-#         end_str = " - " + end.strftime("%Y.%m.%d - %H.%M.%S")
-#     dirname = f"{title} {start_str}{end_str}"
-#     return dirname
+def parse_session_name(name: str, zoneinfo: ZoneInfo) -> tuple[str, datetime] | None:
+    matches = re.match(
+        r"^(.+?) (\d{4}-\d{2}-\d{2}) (\d{2})_(\d{2})$",
+        name,
+    )
+    if not matches:
+        return None
+
+    title, date_str, hour_str, minute_str = matches.groups()
+    parsed = datetime.strptime(
+        f"{date_str} {hour_str}:{minute_str}", "%Y-%m-%d %H:%M"
+    ).astimezone(zoneinfo)
+    return title, parsed
