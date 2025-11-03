@@ -15,6 +15,9 @@
             "source.organizeImports": "always"
         },
     },
+    "evenBetterToml.schema.associations": {
+        "pyproject.toml": "poetry"
+    },
     // required for production environment
     "python.envFile": "${workspaceFolder}/.env",
     "logViewer.watch": [

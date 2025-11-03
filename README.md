@@ -12,7 +12,8 @@ A Windows scheduled task which monitors screenshots & screen recordings, aggrega
 ## Dev Worflows
 - Poetry for dependency management
 - Interactive notebook can be used by running `poetry install --with notebook`
-- Production/test environments are configured by using `.env` (prod) and `dev.env` (debugging)
+- Production/test environments are configured by using `config.yaml` (prod) and `config.dev.yaml` or `config.staging.yaml` (debugging)
+- Directory structure is [src layout](https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/).
 
 # Architecture
 - Internal processing datetime timezone format is **UTC**.
