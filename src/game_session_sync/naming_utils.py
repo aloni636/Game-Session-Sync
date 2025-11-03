@@ -4,9 +4,13 @@ from zoneinfo import ZoneInfo
 
 
 def screenshot_filename(
-    title: str, suffix: str, zoneinfo: ZoneInfo, manual: bool = False
+    title: str,
+    suffix: str,
+    zoneinfo: ZoneInfo,
+    manual: bool = False,
+    _timestamp: datetime | None = None,
 ):
-    timestamp = datetime.now(zoneinfo)
+    timestamp = _timestamp or datetime.now(zoneinfo)
     timestamp_str = timestamp.strftime("%Y.%m.%d %H.%M.%S.%f")[
         :-3
     ]  # keep 3 digits = milliseconds

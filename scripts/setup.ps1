@@ -21,3 +21,6 @@ if (-not (Test-Cmd poetry)) {
 }
 
 if (-not (Test-Cmd poetry)) { throw "Poetry not found after installation. Ensure pipx is on PATH and try again." }
+
+Write-Host "Installing local development version..."
+poetry install
