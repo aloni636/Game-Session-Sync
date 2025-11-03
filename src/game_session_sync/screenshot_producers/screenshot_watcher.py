@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-from ..naming_utils import screenshot_filename
+from ..naming_utils import build_screenshot_filename
 from ..types import Producer
 
 
@@ -34,7 +34,7 @@ class _FileWatcherHandler(FileSystemEventHandler):
             self.log.warning(f"Manual screenshot with unexpected suffix: {src_path!r}")
             return
 
-        dst_path = self.target_dir / screenshot_filename(
+        dst_path = self.target_dir / build_screenshot_filename(
             self.title, src_path.suffix, self.tz, manual=True
         )
         self.log.info(f"Moving: {src_path!r} ---> {dst_path!r}")
@@ -66,8 +66,9 @@ class ScreenshotWatcher(Producer):
 
 
 if __name__ == "__main__":
-    import tzlocal
     from pathlib import Path
+
+    import tzlocal
 
     from game_session_sync.test_helpers import producer_test_run
 

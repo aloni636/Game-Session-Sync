@@ -3,14 +3,14 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 
-def screenshot_filename(
+def build_screenshot_filename(
     title: str,
     suffix: str,
     zoneinfo: ZoneInfo,
     manual: bool = False,
-    _timestamp: datetime | None = None,
+    timestamp: datetime | None = None,
 ):
-    timestamp = _timestamp or datetime.now(zoneinfo)
+    timestamp = timestamp or datetime.now(zoneinfo)
     timestamp_str = timestamp.strftime("%Y.%m.%d %H.%M.%S.%f")[
         :-3
     ]  # keep 3 digits = milliseconds

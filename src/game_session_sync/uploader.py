@@ -220,59 +220,66 @@ class Uploader:
         if self._upload_task:
             await self._upload_task
 
-    async def _last_session(self, title: str) -> _SessionInfo | None:
+    async def _query_sessions(
+        self, title: str | None = None, limit: int | None = None
+    ) -> list[_SessionInfo] | None:
+        async def build_session_info(notion_page) -> _SessionInfo:
+            props = notion_page["properties"]
+
+            def get_utc_datetime(prop: str):
+                date_prop = props[prop]["date"]
+                iso_date_str = date_prop.get("end") or date_prop.get("start")
+                utc_date = datetime.fromisoformat(
+                    iso_date_str.replace("Z", "+00:00")
+                ).astimezone(timezone.utc)
+                return utc_date
+
+            end = get_utc_datetime(self.notion_props.end)
+            start = get_utc_datetime(self.notion_props.start)
+            self.log.info(
+                f"Last Notion session: end: {end.isoformat(timespec='seconds')}"
+            )
+            page_title = props[self.notion_props.title]["select"]["name"]
+
+            session_name = build_session_name(page_title, start, self.user_tz)
+            session_folder = await self._new_drive_dir(session_name, self.drive_root_id)
+            # name, like any rich text property, is a list of text objects supporting bold, italic, hyperlinks etc
+            name_prop = props[self.notion_props.name]["title"]
+            page_name = "".join(fragment["plain_text"] for fragment in name_prop)
+
+            return _SessionInfo(
+                start,
+                end,
+                session_folder["id"],
+                notion_page["id"],
+                page_name,
+            )
+
         try:
+            query_kwargs: dict[str, Any] = {
+                "data_source_id": self.notion_ds_id,
+                "sorts": [
+                    {"property": self.notion_props.end, "direction": "descending"}
+                ],
+            }
+            if title:
+                query_kwargs["filter"] = {
+                    "property": self.notion_props.title,
+                    "select": {"equals": title},
+                }
+            if limit is not None:
+                query_kwargs["page_size"] = limit
+
             q: dict[str, Any] = await asyncio.wait_for(
-                self._notion.data_sources.query(
-                    data_source_id=self.notion_ds_id,
-                    filter={
-                        "property": self.notion_props.title,
-                        # https://developers.notion.com/reference/post-database-query-filter#select
-                        "select": {"equals": title},
-                    },
-                    sorts=[
-                        {"property": self.notion_props.end, "direction": "descending"}
-                    ],
-                    page_size=1,
-                ),
+                self._notion.data_sources.query(**query_kwargs),
                 IO_TIMEOUT_SEC,
             )
             if q.get("results"):
-                notion_page = q["results"][0]
-                props = notion_page["properties"]
-
-                def get_utc_datetime(prop: str):
-                    date_prop = props[prop]["date"]
-                    iso_date_str = date_prop.get("end") or date_prop.get("start")
-                    utc_date = datetime.fromisoformat(
-                        iso_date_str.replace("Z", "+00:00")
-                    ).astimezone(timezone.utc)
-                    return utc_date
-
-                last_end = get_utc_datetime(self.notion_props.end)
-                last_start = get_utc_datetime(self.notion_props.start)
-                self.log.info(
-                    f"Last Notion session: end: {last_end.isoformat(timespec='seconds')}"
+                return await asyncio.gather(
+                    *(build_session_info(notion_page) for notion_page in q["results"])
                 )
-
-                session_name = build_session_name(title, last_start, self.user_tz)
-                session_folder = await self._new_drive_dir(
-                    session_name, self.drive_root_id
-                )
-                # name, like any rich text property, is a list of text objects supporting bold, italic, hyperlinks etc
-                title_prop = props[self.notion_props.name]["title"]
-                page_name = "".join(fragment["plain_text"] for fragment in title_prop)
-
-                return _SessionInfo(
-                    last_start,
-                    last_end,
-                    session_folder["id"],
-                    notion_page["id"],
-                    page_name,
-                )
-
             else:
-                self.log.info(f"No sessions in Notion matching: {title}")
+                self.log.info(f"No sessions in Notion matching: {title!r}")
 
         except (
             KeyError,  # missing key in dictionary
@@ -280,7 +287,13 @@ class Uploader:
             AttributeError,  # end_prop is None type
         ):
             self.log.info("Failed to parse Notion response.", exc_info=True)
+
         return None
+
+    async def _last_session(self, title: str) -> _SessionInfo | None:
+        sessions = await self._query_sessions(title, 1)
+        if sessions and len(sessions) == 1:
+            return sessions[0]
 
     async def _new_session(self, title: str, start: datetime) -> _SessionInfo:
         session_name = build_session_name(title, start, self.user_tz)

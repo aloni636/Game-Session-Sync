@@ -22,15 +22,20 @@
     "python.envFile": "${workspaceFolder}/.env",
     "logViewer.watch": [
         {
-            "title": "Game Session Sync",
-            "pattern": "${workspaceFolder}/game_session_sync.log"
-        },
-        {
             "title": "App Log",
             "pattern": "${workspaceFolder}/app.log"
+        },
+        {
+            "title": "App Test Log",
+            "pattern": "${workspaceFolder}/app_test*.log"
         }
     ],
     "logViewer.followTailMode": "auto",
     "logViewer.chunkSizeKb": 256,
-    "python.analysis.autoImportCompletions": true
+    "python.analysis.autoImportCompletions": true,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
 }

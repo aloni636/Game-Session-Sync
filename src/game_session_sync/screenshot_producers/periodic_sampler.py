@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 import mss
 import mss.tools
 
-from ..naming_utils import screenshot_filename
+from ..naming_utils import build_screenshot_filename
 from ..types import Producer
 
 
@@ -27,7 +27,7 @@ class PeriodicSampler(Producer):
                 # TODO: select the monitor based on the game (fullscreen) window
                 sct_img = sct.grab(sct.monitors[0])  # all monitors combined
                 self.log.info(f"Took screenshot: {sct_img.size}")
-                dct_path = self.target_dir / screenshot_filename(
+                dct_path = self.target_dir / build_screenshot_filename(
                     self.title, ".png", self.tz
                 )
                 mss.tools.to_png(sct_img.rgb, sct_img.size, output=dct_path)

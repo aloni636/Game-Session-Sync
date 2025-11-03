@@ -5,8 +5,6 @@ from logging.handlers import RotatingFileHandler
 from pprint import pformat
 from typing import IO, cast
 
-from game_session_sync.constants import LOG_PATH
-
 
 # Open a new console window running PowerShell that echoes stdin lines
 class Console:
@@ -42,7 +40,7 @@ def dataclass_format(dataclass) -> str:
     return pformat(dataclasses.asdict(dataclass), indent=2, compact=False)
 
 
-def setup_logging():
+def setup_logging(log_path: str = "./app.log"):
     # Common formatter
     fmt = logging.Formatter(
         "%(asctime)s | %(levelname)s | %(name)s | %(funcName)s | %(message)s"
@@ -55,7 +53,7 @@ def setup_logging():
 
     # File handler (info level, rotation)
     file = RotatingFileHandler(
-        LOG_PATH, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
+        log_path, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
     )
     file.setLevel(logging.INFO)
     file.setFormatter(fmt)
