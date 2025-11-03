@@ -1,0 +1,27 @@
+connection:
+  notion_api_token: '<API_KEY>'
+  notion_datasource_id: '<API_KEY>'
+  drive_root_folder_id: '<ID>'
+  drive_settings_file: '<FILE_PATH>'
+  notion_user_tz: '<IANA_TIME_ZONE_STRING>'
+
+session:
+  screenshot_watch_path: '<DIR_PATH>'
+  screenshot_staging_path: '<DIR_PATH>'
+  screenshot_interval_sec: '<INT>'
+  minimum_session_gap_min: '<INT>'
+  minimum_session_length_min: '<INT>'
+  phash_threshold: '<INT>'
+  delete_after_upload: '<BOOL>'
+
+notion_properties:
+  name: '<STRING>'
+  title: '<STRING>'
+  start: '<STRING>'
+  end: '<STRING>'
+  drive_link: '<STRING>'
+
+monitor:
+  game_process_regex_pattern:
+    - '<REGEX_STRING_WITH_ONE_CAPTURE_GROUP>'
+  input_idle_sec: '<INT>'
