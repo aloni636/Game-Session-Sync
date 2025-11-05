@@ -7,7 +7,14 @@ $ADDITIONAL_FILES = @(
 )
 $TASK_NAME = "Game-Session-Sync"
 $DEPLOYMENT_DIR = ".\deployment"
+$WAIT_TIMEOUT_SEC = 10
 
+
+# --- utilities ---
+function Write-Deploy {
+  param([Parameter(Mandatory)][string] $Message)
+  Write-Host "[deploy] $Message"
+}
 
 # --- validation ---
 $missingFiles = $ADDITIONAL_FILES | Where-Object { -not (Test-Path $_) }
@@ -23,61 +30,115 @@ if (-not (Test-Path $DEPLOYMENT_DIR)) {
 # --- elevation ---
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
   ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-  Write-Host "Script requires admin to register tasks to the scheduler. Relaunching with sudo..."
+  Write-Deploy "Script requires admin to register tasks to the scheduler. Relaunching with sudo..."
   if (Get-Command sudo -ErrorAction SilentlyContinue) {
     sudo powershell -ExecutionPolicy Bypass -File "$($MyInvocation.MyCommand.Path)"
   }
   else {
-    Write-Host "Command sudo.exe was not found - Relaunching in a new terminal window..."
+    Write-Deploy "Command sudo.exe was not found - Relaunching in a new terminal window..."
     Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList "-ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Path)`""
   }
   exit
 }
 
 
-# --- build into isolated venv ---
-Write-Host "Starting build with poetry..."
+# --- stop previous task ---
+Write-Deploy "Stopping existing scheduled task..."
+Stop-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue
+
+Write-Deploy "Stopping scheduled task (if running)..."
+Stop-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue
+
+$oldPythonw = Join-Path $DEPLOYMENT_DIR ".venv-prod\Scripts\pythonw.exe"
+if (Test-Path $oldPythonw) {
+  $resolvedOld = (Resolve-Path $oldPythonw).Path
+  $deadline = (Get-Date).AddSeconds($WAIT_TIMEOUT_SEC)
+  do {
+    $running = Get-Process pythonw -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -eq $resolvedOld }
+    if (-not $running) { break }
+    Start-Sleep -Milliseconds 500
+  } while ((Get-Date) -lt $deadline)
+  
+  if ($running) {
+    throw "Timed out waiting for old pythonw.exe to stop - still running from $resolvedOld"
+  }
+}
+
+
+# --- remove old deployment ---
+Write-Deploy "Removing old deployment from '$DEPLOYMENT_DIR'..."
+New-Item -Type Directory $DEPLOYMENT_DIR -ErrorAction SilentlyContinue | Out-Null
+Get-ChildItem $DEPLOYMENT_DIR | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+
+# --- build wheel and requirements.txt ---
+Write-Deploy "Starting build with poetry..."
 poetry build
 $buildExit = $LASTEXITCODE
 if ($buildExit -ne 0) { throw "poetry build failed with exit code $buildExit" }
-Write-Host "Build complete. Locating latest wheel..."
+Write-Deploy "Build complete. Locating latest wheel..."
 $wheel = Get-ChildItem dist\*.whl | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $wheel) {
   throw "No wheel found under dist\*.whl. Did 'poetry build' succeed?"
 }
 
-Write-Host "Preparing deployment directory at '$DEPLOYMENT_DIR'..."
-New-Item -Type Directory $DEPLOYMENT_DIR -ErrorAction SilentlyContinue | Out-Null
-Get-ChildItem $DEPLOYMENT_DIR | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-Write-Host "Copying additional files: $($ADDITIONAL_FILES -join ', ')"
+Write-Deploy "Exporting locked dependencies from poetry.lock..."
+poetry export `
+  --format=requirements.txt `
+  --without-hashes `
+  --only main `
+  --output "$DEPLOYMENT_DIR\requirements.txt"
 
+$exportExit = $LASTEXITCODE
+if ($exportExit -ne 0) { throw "poetry export failed with exit code $exportExit" }
+
+
+# --- setting up production environment ----
+Write-Deploy "Copying additional files: $($ADDITIONAL_FILES -join ', ')"
 foreach ($f in $ADDITIONAL_FILES) {
   Copy-Item $f $DEPLOYMENT_DIR
 }
-Write-Host "Creating production virtual environment..."
+
+Write-Deploy "Creating production virtual environment..."
 python -m venv .\deployment\.venv-prod
-Write-Host "Installing wheel '$($wheel.Name)' into venv..."
-& (Join-Path $DEPLOYMENT_DIR "\.venv-prod\Scripts\python.exe") -m pip install $wheel.FullName
-if ($LASTEXITCODE -ne 0) { throw "pip install failed with exit code $LASTEXITCODE" }
-Write-Host "Dependencies installed. Configuring scheduled task..."
+
+$venvPython = (Join-Path $DEPLOYMENT_DIR "\.venv-prod\Scripts\python.exe")
+
+Write-Deploy "Upgrading pip..."
+& $venvPython -m pip install --upgrade pip
+if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed with exit code $LASTEXITCODE" }
+
+$requirementsPath = Join-Path $DEPLOYMENT_DIR "requirements.txt"
+Write-Deploy "Installing locked dependencies from ${requirementsPath}"
+& $venvPython -m pip install -r $requirementsPath
+if ($LASTEXITCODE -ne 0) {
+  throw "pip install -r '$requirementsPath' failed with exit code $LASTEXITCODE"
+}
+
+Write-Deploy "Installing wheel '$($wheel.Name)' without dependencies..."
+& $venvPython -m pip install --no-deps $wheel.FullName
+if ($LASTEXITCODE -ne 0) { throw "pip install wheel failed with exit code $LASTEXITCODE" }
+
+Write-Deploy "Dependencies installed. Configuring scheduled task..."
 
 
 # --- paths ---
 $wd = (Resolve-Path $DEPLOYMENT_DIR).Path
 $pythonw = (Resolve-Path .\deployment\.venv-prod\Scripts\pythonw.exe).Path
-Write-Host "Using working directory: '$wd'"
-Write-Host "Using pythonw: '$pythonw'"
+Write-Deploy "Using working directory: '$wd'"
+Write-Deploy "Using pythonw: '$pythonw'"
 $Action = New-ScheduledTaskAction -Execute $pythonw -Argument ('-m game_session_sync') -WorkingDirectory $wd
 
 
 # --- triggers ---
-Write-Host "Creating scheduled task triggers (AtStartup, AtLogOn)..."
+Write-Deploy "Creating scheduled task triggers (AtStartup, AtLogOn)..."
 $TriggerStartup = New-ScheduledTaskTrigger -AtStartup
 $TriggerLogon = New-ScheduledTaskTrigger -AtLogOn
 
 
 # --- principal ---
-Write-Host "Configuring principal for user '$env:USERDOMAIN\$env:USERNAME'..."
+Write-Deploy "Configuring principal for user '$env:USERDOMAIN\$env:USERNAME'..."
 $Principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive
 
 
@@ -93,19 +154,17 @@ $Settings = New-ScheduledTaskSettingsSet `
 
 
 # --- register ---
-Write-Host "Registering scheduled task '$TASK_NAME'..."
+Write-Deploy "Registering scheduled task '$TASK_NAME'..."
 Register-ScheduledTask -TaskName $TASK_NAME -Action $Action `
   -Trigger @($TriggerStartup, $TriggerLogon) `
   -Principal $Principal -Settings $Settings `
   -Description "Run Game Session Sync (always-on monitor)" -Force
 
 # restart the task to apply updates now
-Write-Host "Restarting scheduled task to apply updates..."
-Stop-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue
+Write-Deploy "Starting scheduled task with new deployment..."
 Start-ScheduledTask -TaskName $TASK_NAME
-Write-Host "Scheduled task '$TASK_NAME' restarted."
 
-Write-Host @"
+Write-Deploy @"
 
 Setup complete.
 
